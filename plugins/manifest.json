@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "plugins": [
+    {
+      "id": "astrofoundry.keybind-editor",
+      "remote": "https://github.com/astrofoundry/omarchy-keybind-editor.git",
+      "commit": "3dae61adfa69aa2f2d731b90bb0b63d67d4c3509",
+      "patch": "plugins/patches/astrofoundry.keybind-editor.patch",
+      "untracked": []
+    },
+    {
+      "id": "bobbynicholas.omaland",
+      "remote": "https://github.com/bobby-nicholas/omaland.git",
+      "commit": "d67741f90ea0dad2d538641b699777925fac7344",
+      "patch": "plugins/patches/bobbynicholas.omaland.patch",
+      "untracked": []
+    },
+    {
+      "id": "crmne.hyprmoncfg",
+      "remote": "https://github.com/crmne/omarchy-hyprmoncfg.git",
+      "commit": "513e5ce669224f3d3eabf72bd4342fb29f7622c7",
+      "patch": null,
+      "untracked": []
+    },
+    {
+      "id": "expose.window-overview",
+      "remote": "https://github.com/kristofferR/omarchy-expose.git",
+      "commit": "7a31c5e846a2e12bc1353ba5a0d90d42cc4f2dc8",
+      "patch": "plugins/patches/expose.window-overview.patch",
+      "untracked": []
+    },
+    {
+      "id": "io.github.grichard99.omaproton-vpn",
+      "remote": "https://github.com/grichard99/omaproton-vpn.git",
+      "commit": "6d9165dec17645abebfb3a4008d195a80060f67b",
+      "patch": null,
+      "untracked": []
+    },
+    {
+      "id": "io.github.pablo-merino.altswitch",
+      "remote": "https://github.com/Pablo-Merino/omarchy-altswitch.git",
+      "commit": "b99a58ca94e7ffcb6785d009a2e88f9e68599642",
+      "patch": "plugins/patches/io.github.pablo-merino.altswitch.patch",
+      "untracked": []
+    },
+    {
+      "id": "io.github.sirjul1337.lock-explorer",
+      "remote": "https://github.com/SirJul1337/omarchy-lock-explorer.git",
+      "commit": "e285d52f0fdee3211af994ddfe0e76204b18e830",
+      "patch": "plugins/patches/io.github.sirjul1337.lock-explorer.patch",
+      "untracked": []
+    },
+    {
+      "id": "io.github.tallsam.navbar-cat",
+      "remote": "https://github.com/tallsam/omarchy-navbar-cat.git",
+      "commit": "6ddd61a6744bab19b04d131ff4f2e087a504ce20",
+      "patch": "plugins/patches/io.github.tallsam.navbar-cat.patch",
+      "untracked": []
+    },
+    {
+      "id": "io.github.twiking.omasettings",
+      "remote": "https://github.com/twiking/omasettings.git",
+      "commit": "003cb2238c524d56566e44d281b4d10152849fc7",
+      "patch": "plugins/patches/io.github.twiking.omasettings.patch",
+      "untracked": []
+    },
+    {
+      "id": "rosakodu.dock",
+      "remote": "https://github.com/rosakodu/omarchy-dock.git",
+      "commit": "a469e287c38737d672f81b37cdc6036c219fdf3c",
+      "patch": "plugins/patches/rosakodu.dock.patch",
+      "untracked": [
+        {
+          "path": "plugins/untracked/rosakodu.dock/components/WindowChooser.qml",
+          "plugin_path": "components/WindowChooser.qml",
+          "mode": "0644"
+        }
+      ]
+    }
+  ]
+}

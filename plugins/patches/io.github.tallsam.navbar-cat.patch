@@ -1,0 +1,183 @@
+diff --git c/Cat.qml w/Cat.qml
+index 58ed7f6..9a15570 100644
+--- c/Cat.qml
++++ w/Cat.qml
+@@ -30,13 +30,22 @@ Item {
+   property string omarchyPath: ""
+ 
+   readonly property string pluginId: manifest && manifest.id ? String(manifest.id) : "io.github.tallsam.navbar-cat"
+-  readonly property string assetDir: {
++  // Third-party manifests are deliberately sanitized by Omarchy Shell before
++  // they reach plugin QML, so __sourceDir is normally absent here. This local
++  // install is pinned under its manifest ID; use that known user-owned path
++  // when the private source field is unavailable.
++  readonly property string pluginDir: {
+     var dir = manifest && manifest.__sourceDir ? String(manifest.__sourceDir) : ""
++    if (dir !== "") return dir.replace(/^file:\/\//, "")
++    return Quickshell.env("HOME") + "/.config/omarchy/plugins/" + root.pluginId
++  }
++  readonly property string assetDir: {
++    var dir = root.pluginDir
+     if (dir === "") return ""
+     return (dir.indexOf("file://") === 0 ? dir : "file://" + dir) + "/assets"
+   }
+   readonly property string helper: {
+-    var dir = manifest && manifest.__sourceDir ? String(manifest.__sourceDir) : ""
++    var dir = root.pluginDir
+     if (dir === "") return ""
+     return dir.replace(/^file:\/\//, "") + "/bin/navbar-cat-cursor"
+   }
+@@ -68,7 +77,7 @@ Item {
+   readonly property int sleepAfter: Number(config.sleepAfter) > 0 ? Number(config.sleepAfter) : 180
+   readonly property var reactions: config.reactions && typeof config.reactions === "object"
+     ? config.reactions : ({})
+-  readonly property int catSize: Number(config.size) > 0 ? Number(config.size) : 16
++  readonly property int catSize: Number(config.size) > 0 ? Number(config.size) : 32
+ 
+   // Unknown names fall back rather than leaving the cat invisible on a typo.
+   readonly property string character: {
+@@ -99,6 +108,18 @@ Item {
+   readonly property int barSize: bar && bar.barSize ? bar.barSize : 26
+   readonly property bool barHidden: bar ? bar.barHidden === true : false
+ 
++  // Keep the cat out of immersive surfaces. The screensaver is a terminal
++  // launched with this stable app id. Hyprland's active-window state also
++  // covers compositor fullscreen, which is not always reflected by the
++  // Wayland toplevel's client-requested fullscreen flag.
++  readonly property var activeToplevel: ToplevelManager.activeToplevel
++  property string activeAppId: ""
++  property bool compositorFullscreen: false
++  readonly property bool screensaverActive: activeAppId === "org.omarchy.screensaver"
++    || (activeToplevel && String(activeToplevel.appId || "") === "org.omarchy.screensaver")
++  readonly property bool fullscreenActive: compositorFullscreen
++  readonly property bool suppressed: barHidden || screensaverActive || fullscreenActive
++
+   // ------------------------------------------------------------- monitors
+ 
+   // One cat, on the output Hyprland has focused, so it follows you between
+@@ -226,7 +247,43 @@ Item {
+   // started in the same spot and wandered the same route.
+   property var brainState: Brain.freshState(Date.now() % 2147483647)
+ 
+-  readonly property bool maskActive: catSettled && root.pettable && !root.barHidden
++  readonly property bool maskActive: catSettled && root.pettable && !root.suppressed
++
++  // The compositor's fullscreen flag is queried only after active-window or
++  // fullscreen events; unlike a polling loop this is idle-cost free.
++  function refreshActiveWindow() {
++    if (!activeWindowProbe.running) activeWindowProbe.running = true
++  }
++
++  Process {
++    id: activeWindowProbe
++    running: false
++    command: ["hyprctl", "activewindow", "-j"]
++    stdout: StdioCollector {
++      waitForEnd: true
++      onStreamFinished: {
++        try {
++          var active = JSON.parse(text || "{}")
++          root.activeAppId = String(active.class || "")
++          root.compositorFullscreen = Number(active.fullscreen) > 0
++            || Number(active.fullscreenClient) > 0
++        } catch (error) {
++          root.activeAppId = ""
++          root.compositorFullscreen = false
++        }
++      }
++    }
++  }
++
++  // A fullscreen transition may not emit an active-window event when the same
++  // client keeps focus. While hidden, retry once per second so leaving
++  // fullscreen or dismissing the screensaver restores the cat promptly.
++  Timer {
++    interval: 1000
++    repeat: true
++    running: root.suppressed
++    onTriggered: root.refreshActiveWindow()
++  }
+ 
+   // --------------------------------------------------------- cursor feed
+ 
+@@ -235,7 +292,7 @@ Item {
+   // talks to the socket directly instead of shelling out to hyprctl.
+   Process {
+     id: cursorFeed
+-    running: root.ready && root.chaseCursor && !root.barHidden
++    running: root.ready && root.chaseCursor && !root.suppressed
+     command: [root.helper]
+     stdinEnabled: true
+ 
+@@ -274,6 +331,11 @@ Item {
+       }
+       root._lastWorkspaceId = id
+     }
++    function onRawEvent(event) {
++      var name = String(event && event.name ? event.name : "")
++      if (name === "activewindow" || name === "activewindowv2" || name === "fullscreen")
++        root.refreshActiveWindow()
++    }
+   }
+   property int _lastWorkspaceId: -1
+ 
+@@ -291,7 +353,7 @@ Item {
+   function nudge() {
+     // Something happened that the cat might care about — make sure the loop is
+     // running to notice it.
+-    if (!ticker.running && !barHidden) ticker.running = true
++    if (!ticker.running && !suppressed) ticker.running = true
+   }
+ 
+   Timer {
+@@ -413,12 +475,17 @@ Item {
+     onTriggered: root.nudge()
+   }
+ 
+-  onBarHiddenChanged: {
+-    if (barHidden) ticker.running = false
+-    else nudge()
++  onSuppressedChanged: {
++    if (suppressed) {
++      ticker.running = false
++      stirAlarm.stop()
++    } else {
++      nudge()
++    }
+   }
+ 
+   Component.onCompleted: {
++    Qt.callLater(refreshActiveWindow)
+     lastPointerMoveAt = Date.now()
+     var workspace = Hyprland.focusedWorkspace
+     if (workspace) _lastWorkspaceId = Number(workspace.id)
+@@ -463,7 +530,7 @@ Item {
+     id: window
+ 
+     screen: root.catScreen
+-    visible: root.catScreen !== null && !root.barHidden
++    visible: root.catScreen !== null && !root.suppressed
+     color: "transparent"
+ 
+     exclusionMode: ExclusionMode.Ignore
+@@ -509,6 +576,7 @@ Item {
+     CatSprite {
+       id: sprite
+ 
++      visible: !root.suppressed
+       width: root.catSize
+       height: root.catSize
+       devicePixels: root.catSize * (root.catScreen ? root.catScreen.devicePixelRatio : 1)
+diff --git c/CatMenu.qml w/CatMenu.qml
+index 145af71..2d590e0 100644
+--- c/CatMenu.qml
++++ w/CatMenu.qml
+@@ -26,7 +26,7 @@ PanelWindow {
+ 
+   signal chose(string key, var value)
+ 
+-  visible: open && cat !== null
++  visible: open && cat !== null && !cat.suppressed
+   screen: cat ? cat.catScreen : null
+   color: "transparent"
+ 

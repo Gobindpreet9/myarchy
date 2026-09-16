@@ -1,0 +1,252 @@
+diff --git c/Editor.qml w/Editor.qml
+index 7aea70d..a5c6077 100644
+--- c/Editor.qml
++++ w/Editor.qml
+@@ -64,6 +64,7 @@ Item {
+     onSaved: {
+       editor.status = "Saved " + Qt.formatTime(new Date(), "HH:mm:ss")
+       if (editor.service && typeof editor.service.reloadDesigns === "function") editor.service.reloadDesigns()
++      else Quickshell.execDetached(["omarchy-shell", "lock", "rescanDesigns"])
+     }
+     onSaveFailed: function(error) { editor.status = "Save failed: " + error }
+     onFileChanged: reload()
+diff --git c/Explorer.qml w/Explorer.qml
+index c17ce80..41407ee 100644
+--- c/Explorer.qml
++++ w/Explorer.qml
+@@ -14,6 +14,35 @@ Item {
+   property var shell: null
+   property var manifest: null
+   property var service: null
++  property string savedDesignId: Designs.DEFAULT_ID
++  property int localDesignRevision: 0
++
++  function loadSavedDesign() {
++    try {
++      var config = JSON.parse(String(shellConfigFile.text() || ""))
++      var plugins = Array.isArray(config.plugins) ? config.plugins : []
++      for (var i = 0; i < plugins.length; i++) {
++        var entry = plugins[i]
++        if (entry && String(entry.id || "") === root.pluginId && entry.design) {
++          root.savedDesignId = String(entry.design)
++          return
++        }
++      }
++    } catch (e) {}
++    root.savedDesignId = Designs.DEFAULT_ID
++  }
++
++  // Current Omarchy isolates authentication services, including the lock
++  // service, from overlay plugins. Keep the active marker in sync through the
++  // persisted user setting when that direct service reference is unavailable.
++  FileView {
++    id: shellConfigFile
++    path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
++    watchChanges: true
++    printErrors: false
++    onLoaded: root.loadSavedDesign()
++    onFileChanged: reload()
++  }
+ 
+   property bool opened: false
+   // A resync that arrived while this window was never yet shown cannot grab a
+@@ -57,14 +86,19 @@ Item {
+   readonly property var categories: Designs.categories()
+   readonly property var designs: {
+     var r = service ? service.designsRevision : 0
+-    if (mainTab === "animation") return Designs.animations()
+-    return Designs.stylings()
++    var local = root.localDesignRevision
++    var list = mainTab === "animation" ? Designs.animations() : Designs.stylings()
++    if (category === "all") return list
++    return list.filter(function(d) { return (d.tags || []).indexOf(category) !== -1 })
+   }
+   readonly property string pluginId: manifest && manifest.id ? String(manifest.id) : "io.github.sirjul1337.lock-explorer"
+-  readonly property string activeDesignId: service ? service.designId : Designs.DEFAULT_ID
++  readonly property string activeDesignId: service ? service.designId : savedDesignId
+   readonly property var selectedDesign: designs.length > 0 ? designs[Math.max(0, Math.min(selectedIndex, designs.length - 1))] : null
+   readonly property string avatarUrl: service ? service.avatarUrl : ""
+ 
++  property string applyError: ""
++  property string applyingDesignId: ""
++
+   // Quick setting for the unlock animation, the same one `omarchy-shell lock
+   // setUnlockAnimation` writes. Off by default.
+   readonly property var unlockOptions: [
+@@ -531,11 +565,13 @@ Item {
+   function open(payloadJson) {
+     root.opened = true
+     root.fullPreview = false
+-    root.mainTab = root.requestedTab.length > 0 ? root.requestedTab : "styling"
++    var active = Designs.byId(root.activeDesignId)
++    root.mainTab = root.requestedTab.length > 0
++      ? root.requestedTab : (active && (active.anim === true || active.clip === true) ? "animation" : "styling")
+     root.requestedTab = ""
+     root.category = "all"
+-    var idx = Designs.indexOf(root.activeDesignId)
+-    root.selectedIndex = idx >= 0 ? idx : 0
++    root.selectedIndex = 0
++    root.selectById(root.activeDesignId)
+     if (root.service) {
+       if (typeof root.service.rescanUserDesigns === "function") root.service.rescanUserDesigns()
+       if (typeof root.service.refreshBackground === "function") root.service.refreshBackground()
+@@ -669,13 +705,69 @@ Item {
+   }
+ 
+   function customizeSelected() {
+-    if (!root.selectedDesign || !root.service) return
++    if (!root.selectedDesign) return
+     if (root.selectedDesign.path) { openEditor(root.selectedDesign); return }
+-    root.service.customizeDesign(root.selectedDesign.id)
++    if (root.service && typeof root.service.customizeDesign === "function") {
++      root.service.customizeDesign(root.selectedDesign.id)
++      return
++    }
++    root.customizeWithoutService(root.selectedDesign)
+   }
+ 
+   function newDesign() {
+-    if (root.service) root.service.customizeDesign("new")
++    if (root.service && typeof root.service.customizeDesign === "function") root.service.customizeDesign("new")
++  }
++
++  // The service is intentionally unavailable to this overlay when it is an
++  // authentication-service clone. Mirror its small, safe copy operation here
++  // so Customize still opens an editable copy of the selected design.
++  readonly property string pluginDir: {
++    var url = String(Qt.resolvedUrl("."))
++    return decodeURIComponent(url.replace(/^file:\/\//, "")).replace(/\/$/, "")
++  }
++  Process {
++    id: customizeFallbackProc
++    stdout: StdioCollector {
++      id: customizeFallbackOut
++      waitForEnd: true
++      onStreamFinished: {
++        var path = String(customizeFallbackOut.text || "").trim()
++        if (path.length === 0) return
++        var design = Designs.fromUserFile(path)
++        Designs.setUser(Designs.USER.concat([design]))
++        root.localDesignRevision += 1
++        Quickshell.execDetached(["omarchy-shell", "lock", "rescanDesigns"])
++        root.setCategory("custom")
++        Qt.callLater(function() {
++          root.selectById(design.id)
++          root.openEditor(design)
++        })
++      }
++    }
++  }
++
++  function customizeWithoutService(design) {
++    if (!design || !design.file || customizeFallbackProc.running) return
++    var importLine = 'import "../plugins/' + root.pluginId + '/designs"'
++    customizeFallbackProc.command = ["bash", "-c", '
++set -e
++src="$1"; dir="$2"; base="$3"; imp="$4"
++mkdir -p "$dir"
++target="$dir/$base.qml"; n=2
++while [[ -e "$target" ]]; do target="$dir/$base$n.qml"; n=$((n+1)); done
++{
++  echo "// Customized copy. Edit here or with:"
++  echo "//   omarchy-shell lock editDesign my-$(basename \"$target\" .qml | tr \"[:upper:]\" \"[:lower:]\")"
++  awk -v imp="$imp" \'
++    /^import / { last = NR }
++    { lines[NR] = $0 }
++    END { for (i = 1; i <= NR; i++) { print lines[i]; if (i == last) print imp } }
++  \' "$src"
++} > "$target"
++echo "$target"
++', "customize", root.pluginDir + "/designs/" + design.file,
++      Quickshell.env("HOME") + "/.config/omarchy/lock-designs", design.file.replace(/\.qml$/, ""), importLine]
++    customizeFallbackProc.running = true
+   }
+ 
+   function openEditor(design) {
+@@ -738,8 +830,36 @@ Item {
+ 
+   function apply() {
+     if (!selectedDesign) return
+-    if (root.service && typeof root.service.setDesign === "function") root.service.setDesign(selectedDesign.id)
+-    root.dismiss()
++    root.useDesign(selectedDesign.id)
++  }
++
++  Process {
++    id: applyDesignProc
++    stdout: StdioCollector { id: applyOutput; waitForEnd: true }
++    stderr: StdioCollector { id: applyErrors; waitForEnd: true }
++    onExited: function(code, status) {
++      if (code === 0 && String(applyOutput.text).trim() === "ok") {
++        root.savedDesignId = root.applyingDesignId
++        shellConfigFile.reload()
++        root.applyError = ""
++      } else {
++        root.applyError = "Could not apply design: " + String(applyErrors.text || applyOutput.text || "service unavailable").trim()
++      }
++    }
++  }
++
++  // Lock services are isolated by current Omarchy releases, so overlays do
++  // not receive the service object directly. Go through the lock IPC target
++  // in that case; it is the supported path and persists the selection.
++  function useDesign(id) {
++    var d = Designs.byId(String(id || ""))
++    if (!d) return false
++    if (applyDesignProc.running) return false
++    root.applyError = ""
++    root.applyingDesignId = d.id
++    applyDesignProc.command = ["omarchy-shell", "lock", "setDesign", d.id]
++    applyDesignProc.running = true
++    return true
+   }
+ 
+   PanelWindow {
+@@ -2789,6 +2909,8 @@ Item {
+           anchors.left: parent.left
+           anchors.verticalCenter: parent.verticalCenter
+           text: {
++            if (root.applyError.length > 0) return root.applyError
++            if (applyDesignProc.running) return "Applying design…"
+             if (root.mainTab === "editor") return "Changes save automatically   ·   Esc: back"
+             if (root.mainTab === "boot") return "Click a card to pick it   ·   Apply writes it to the boot image   ·   B / Esc: back"
+             if (root.mainTab === "settings") return "U / Esc: back"
+@@ -2876,7 +2998,7 @@ Item {
+               MouseArea {
+                 anchors.fill: parent
+                 onClicked: {
+-                  if (root.service && root.editingDesign) root.service.setDesign(root.editingDesign.id)
++                  if (root.editingDesign) root.useDesign(root.editingDesign.id)
+                 }
+               }
+             }
+diff --git c/Service.qml w/Service.qml
+index 23f297c..e3fb95e 100644
+--- c/Service.qml
++++ w/Service.qml
+@@ -13,11 +13,24 @@ Item {
+   property var manifest: null
+   property string omarchyPath: ""
+ 
++  property var savedShellConfig: ({})
++  FileView {
++    path: Quickshell.env("HOME") + "/.config/omarchy/shell.json"
++    watchChanges: true
++    printErrors: false
++    onFileChanged: reload()
++    onLoaded: {
++      try { root.savedShellConfig = JSON.parse(text()) } catch (e) {
++        console.warn("Lock settings could not be read:", e)
++      }
++    }
++  }
++
+   // selected design lives on this plugin's entry in shell.json
+   readonly property string pluginId: manifest && manifest.id ? String(manifest.id) : "io.github.sirjul1337.lock-explorer"
+   property string designOverride: ""
+   readonly property string configuredDesignId: {
+-    var cfg = shell ? shell.shellConfig : null
++    var cfg = root.savedShellConfig
+     var list = cfg && Array.isArray(cfg.plugins) ? cfg.plugins : []
+     for (var i = 0; i < list.length; i++) {
+       var entry = list[i]

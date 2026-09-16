@@ -1,0 +1,945 @@
+diff --git c/BarWidget.qml w/BarWidget.qml
+index 17ffd8d..6328cf8 100644
+--- c/BarWidget.qml
++++ w/BarWidget.qml
+@@ -1,4 +1,5 @@
+ import QtQuick
++import QtQuick.Controls
+ import QtQuick.Layouts
+ import Quickshell
+ import Quickshell.Hyprland
+@@ -22,6 +23,8 @@ BarWidget {
+   property bool showFolderTitles: true
+   property bool showBadges: true
+   property bool widgetsEnabled: true
++  property real dockOpacity: 0.9
++  property real glassStrength: 0.35
+   readonly property bool settingsOpen: settingsWindow.open
+   property bool isSavingSettings: false
+ 
+@@ -62,6 +65,10 @@ BarWidget {
+       var txt = settingsFile.text()
+       if (txt && txt.trim().length > 0) {
+         var s = JSON.parse(txt)
++        root.glassStrength = s.glassStrength !== undefined && isFinite(Number(s.glassStrength))
++            ? Math.max(0, Math.min(1, Number(s.glassStrength))) : 0.35
++        root.dockOpacity = s.glassmorphism === true && isFinite(Number(s.blurOpacity))
++            ? Math.max(0.1, Math.min(1, Number(s.blurOpacity))) : 0.9
+         var normalized = DockSettings.normalize(s)
+         root.visibilityMode = normalized.visibilityMode
+         if (s && s.preferredVisibilityMode !== undefined) {
+@@ -114,6 +121,9 @@ BarWidget {
+     } catch(e) {}
+ 
+     s.dockEnabled = root.dockEnabled
++    s.glassmorphism = true
++    s.blurOpacity = root.dockOpacity
++    s.glassStrength = root.glassStrength
+     s.visibilityMode = root.visibilityMode
+     s.preferredVisibilityMode = root.preferredVisibilityMode
+     s.autohide = DockSettings.legacyAutohide(root.visibilityMode)
+@@ -284,7 +294,7 @@ BarWidget {
+     bar: root.bar
+     centerOnBar: true
+     contentWidth: (Style && typeof Style.space === "function") ? Style.space(410) : 410
+-    contentHeight: (root.autohide && root.effectiveMode === "keybind") ? 550 : 480
++    contentHeight: (root.autohide && root.effectiveMode === "keybind") ? 660 : 590
+     borderSpec: Border.localOrSurfaceSpec("popups", "border", Color.accent, Color.accent, Math.max(1, Style.space(2)))
+ 
+     ColumnLayout {
+@@ -324,7 +334,44 @@ BarWidget {
+           color: Color.composed("popups.border", "popups.border-alpha", Color.border, 0.35)
+         }
+ 
++        RowLayout {
++          Layout.fillWidth: true
++          Layout.preferredHeight: 40
++          Text {
++            text: root.glassStrength === 0 ? "Glass finish · Off" : "Glass finish " + Math.round(root.glassStrength * 100) + "%"
++            color: Color.popups.text
++            font.family: Style.font.family
++            font.pixelSize: 12
++          }
++          Slider {
++            Layout.fillWidth: true
++            from: 0; to: 1; stepSize: 0.05
++            value: root.glassStrength
++            onMoved: { root.glassStrength = value; root.saveSettings() }
++          }
++        }
++
+         // Top Slot (Fixed 42px: crossfades Enable Dock switch <-> Reveal Method dropdown)
++        RowLayout {
++          Layout.fillWidth: true
++          Layout.preferredHeight: 40
++          Text {
++            text: "Translucency " + Math.round((1 - root.dockOpacity) * 100) + "%"
++            color: Color.popups.text
++            font.family: Style.font.family
++            font.pixelSize: 12
++          }
++          Slider {
++            Layout.fillWidth: true
++            from: 0; to: 0.9; stepSize: 0.05
++            value: 1 - root.dockOpacity
++            onMoved: {
++              root.dockOpacity = 1 - value
++              root.saveSettings()
++            }
++          }
++        }
++
+         Item {
+           Layout.fillWidth: true
+           Layout.preferredHeight: 42
+diff --git c/DockItem.qml w/DockItem.qml
+index 27887e1..dcd1a92 100644
+--- c/DockItem.qml
++++ w/DockItem.qml
+@@ -18,6 +18,7 @@ Item {
+     property var shell: null
+     property real slotSize: 42
+     property real iconBaseSize: 24
++    property real proximity: 0
+     property int systemBorderSize: Style.normalBorderWidth > 0 ? Style.normalBorderWidth : 2
+     property int systemRounding: Style.cornerRadius >= 0 ? Style.cornerRadius : 12
+     property bool isSelected: false
+@@ -41,6 +42,9 @@ Item {
+     signal minimizeRequested(var itemData, int targetIndex)
+     signal dragStarted(int fromIndex)
+     signal dragEnded()
++    signal windowChooserRequested(var itemData, int itemIndex)
++    signal windowChooserClicked(var itemData, int itemIndex)
++    signal windowChooserDismissRequested()
+ 
+     readonly property int badgeCount: (root.itemData && typeof root.itemData.badgeCount === "number") ? root.itemData.badgeCount : 0
+ 
+@@ -122,16 +126,16 @@ Item {
+         NumberAnimation {
+             target: root
+             property: "clickScaleFactor"
+-            from: 0.88
++            from: 0.96
+             to: 1.0
+-            duration: 220
+-            easing.type: Easing.OutBack
++            duration: 150
++            easing.type: Easing.OutCubic
+         }
+         SequentialAnimation {
+             NumberAnimation {
+                 target: root
+                 property: "clickLiftY"
+-                to: (root.isVertical ? 0 : (root.barPosition === "bottom" ? -4 : 4))
++                to: 0
+                 duration: 90
+                 easing.type: Easing.OutQuad
+             }
+@@ -140,7 +144,7 @@ Item {
+                 property: "clickLiftY"
+                 to: 0
+                 duration: 130
+-                easing.type: Easing.OutBounce
++                easing.type: Easing.OutCubic
+             }
+         }
+     }
+@@ -168,15 +172,63 @@ Item {
+     }
+ 
+     // Main animated icon wrapper (smooth, buttery rail motion)
++    Rectangle {
++        id: hoverHalo
++        anchors.centerIn: parent
++        width: root.iconBaseSize + 16
++        height: root.iconBaseSize + 16
++        radius: 12
++        readonly property bool activeApp: !!(root.itemData && root.itemData.isActive && !root.itemData.isMinimized)
++        color: activeApp ? Util.alpha(Color.accent, 0.20) : Util.alpha(Color.bar.text, 0.08)
++        border.width: activeApp ? 1 : 0
++        border.color: Util.alpha(Color.accent, 0.55)
++        opacity: (activeApp || mouseArea.containsMouse) && !root.isEditMode && !root.isDragging ? 1.0 : 0.0
++        scale: 1.0
++        z: 0
++        antialiasing: true
++        Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
++        Behavior on scale { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
++    }
++
++    Rectangle {
++        id: appTooltip
++        visible: mouseArea.containsMouse && !root.isEditMode && root.itemData
++        anchors.horizontalCenter: parent.horizontalCenter
++        anchors.bottom: parent.top
++        anchors.bottomMargin: 8
++        width: Math.min(220, tooltipLabel.implicitWidth + 18)
++        height: 28
++        radius: 7
++        color: Util.alpha(Color.popups.background, 0.98)
++        border.width: 1
++        border.color: Util.alpha(Color.popups.text, 0.14)
++        z: 90
++
++        Text {
++            id: tooltipLabel
++            anchors.centerIn: parent
++            width: Math.min(202, implicitWidth)
++            text: String(root.itemData.name || root.itemData.appId || "Application")
++                + ((root.itemData.toplevels && root.itemData.toplevels.length >= 2)
++                    ? " · " + root.itemData.toplevels.length + " windows" : "")
++            textFormat: Text.PlainText
++            elide: Text.ElideRight
++            color: Color.popups.text
++            font.family: Style.font.family
++            font.pixelSize: 11
++        }
++    }
++
+     Item {
+         id: iconWrapper
+         x: (parent.width - width) / 2 + root.clampedDragOffsetX
+-        y: Math.round((parent.height - height) / 2) - 1 + root.clampedDragOffsetY + root.clickLiftY
++        y: Math.round((parent.height - height) / 2) - 1 + root.clampedDragOffsetY + root.clickLiftY - (root.isVertical ? 0 : root.proximity * 4)
++        Behavior on y { enabled: !root.isDragging; NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+         width: root.iconBaseSize
+         height: root.iconBaseSize
+         z: 1
+ 
+-        scale: (root.isDragging ? 1.15 : (root.isEditMode ? 0.82 : (root.isMergeTarget ? 0.94 : (root.isPressVisualActive ? 0.92 : (mouseArea.containsMouse ? 1.10 : 1.0))))) * root.clickScaleFactor
++        scale: (root.isDragging ? 1.16 : (root.isEditMode ? 0.82 : (root.isMergeTarget ? 0.94 : (root.isPressVisualActive ? 0.93 : 1.0 + root.proximity * 0.28)))) * root.clickScaleFactor
+         opacity: root.iconsReady ? (root.isDragging ? 0.92 : 1.0) : 0.0
+ 
+         Behavior on scale {
+@@ -435,21 +487,29 @@ Item {
+         }
+     }
+ 
+-    // 3. Multi-instance Duplicate Status Capsule (Sliding window viewport)
+-    DockDuplicateCapsule {
+-        id: duplicateCapsule
+-        visible: root.iconsReady && !root.isEditMode && root.itemData && !root.itemData.isStack && root.itemData.isRunning && root.itemData.toplevels && root.itemData.toplevels.length >= 2
+-        opacity: visible ? 1.0 : 0.0
+-        Behavior on opacity { NumberAnimation { duration: 180 } }
++    // A small count makes grouped windows obvious without turning an app into
++    // an unreadable stack of mini-icons.
++    Rectangle {
++        visible: root.iconsReady && !root.isEditMode && root.itemData && !root.itemData.isStack
++            && root.itemData.toplevels && root.itemData.toplevels.length >= 2
++        anchors.right: iconWrapper.right
++        anchors.top: iconWrapper.top
++        anchors.rightMargin: -5
++        anchors.topMargin: -5
++        width: 16
++        height: 16
++        radius: 8
++        color: Color.accent
++        z: 5
+ 
+-        totalWindows: (root.itemData && root.itemData.toplevels) ? root.itemData.toplevels.length : 0
+-        effectiveTopIndex: root.effectiveTopIndex
+-        isAppActive: (root.itemData && root.itemData.isActive === true && !root.itemData.isMinimized)
+-        isPreviewing: (root.previewTopIndex >= 0)
+-
+-        x: Math.round((parent.width - width) / 2 + root.clampedDragOffsetX)
+-        y: parent.height - height - 2 + root.clampedDragOffsetY
+-        z: root.isDragging ? 101 : 1
++        Text {
++            anchors.centerIn: parent
++            text: String(Math.min(9, root.itemData.toplevels.length))
++            color: Color.background
++            font.family: Style.font.family
++            font.pixelSize: 10
++            font.bold: true
++        }
+     }
+ 
+     // 4. Running / Active Application Indicator (Single instance)
+@@ -460,11 +520,11 @@ Item {
+         Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
+ 
+         x: Math.round((parent.width - width) / 2 + root.clampedDragOffsetX)
+-        y: parent.height - height - 3 + root.clampedDragOffsetY
++        y: parent.height - height - 4 + root.clampedDragOffsetY
+         z: root.isDragging ? 101 : 1
+ 
+         height: 2
+-        width: (root.itemData && root.itemData.isActive && !root.itemData.isMinimized) ? 10 : 4
++        width: (root.itemData && root.itemData.isActive && !root.itemData.isMinimized) ? 12 : 5
+         radius: 1
+         color: (root.itemData && root.itemData.isActive && !root.itemData.isMinimized) ? Color.accent : Color.composed("popups.text", "popups.text-alpha", Color.text, 0.6)
+         antialiasing: true
+@@ -487,6 +547,17 @@ Item {
+         root.previewTopIndex = nextIdx
+     }
+ 
++    Timer {
++        id: windowChooserTimer
++        interval: 300
++        repeat: false
++        onTriggered: {
++            if (mouseArea.containsMouse && root.itemData && !root.itemData.isStack
++                    && root.itemData.toplevels && root.itemData.toplevels.length >= 1)
++                root.windowChooserRequested(root.itemData, root.itemIndex)
++        }
++    }
++
+     MouseArea {
+         id: mouseArea
+         anchors.fill: parent
+@@ -510,6 +581,9 @@ Item {
+ 
+         onEntered: {
+             mouseArea.forceActiveFocus()
++            if (!root.isEditMode && root.itemData && !root.itemData.isStack
++                    && root.itemData.toplevels && root.itemData.toplevels.length >= 1)
++                windowChooserTimer.restart()
+         }
+ 
+         Keys.onRightPressed: function(event) {
+@@ -558,13 +632,8 @@ Item {
+                     return
+                 }
+                 if (root.itemData) {
+-                    if (root.itemData.isStack) {
+-                        clickEffectAnim.restart()
+-                        root.itemRightClicked(root.itemData, root)
+-                    } else if (root.itemData.isRunning && !root.itemData.isMinimized) {
+-                        clickEffectAnim.restart()
+-                        root.minimizeRequested(root.itemData, root.effectiveTopIndex)
+-                    }
++                    clickEffectAnim.restart()
++                    root.itemRightClicked(root.itemData, root)
+                 }
+             }
+         }
+@@ -594,7 +663,7 @@ Item {
+                 var slotCenter = targetIdx * root.slotSize
+                 var distFromSlotCenter = absolutePos - slotCenter
+ 
+-                var canMerge = root.itemData && !root.itemData.isStack
++                var canMerge = root.itemData && !root.itemData.isStack && (mouse.modifiers & Qt.ControlModifier)
+                 var isMerge = false
+ 
+                 if (canMerge && targetIdx !== root.itemIndex) {
+@@ -626,7 +695,7 @@ Item {
+                 var slotCenter = targetIdx * root.slotSize
+                 var distFromSlotCenter = absolutePos - slotCenter
+ 
+-                var canMerge = root.itemData && !root.itemData.isStack
++                var canMerge = root.itemData && !root.itemData.isStack && (mouse.modifiers & Qt.ControlModifier)
+                 var isMerge = false
+ 
+                 if (canMerge && targetIdx !== root.itemIndex) {
+@@ -661,6 +730,8 @@ Item {
+             longPressTimer.stop()
+             root.isWheelScrolling = false
+             previewResetTimer.restart()
++            windowChooserTimer.stop()
++            root.windowChooserDismissRequested()
+         }
+ 
+         onCanceled: {
+@@ -718,17 +789,10 @@ Item {
+                 }
+                 if (root.itemData) {
+                     root.itemLeftClicked(root.itemData)
+-                    if (root.previewTopIndex >= 0) {
+-                        root.restoreOrLaunchRequested(root.itemData, root.previewTopIndex)
+-                    } else {
+-                        var tops = root.itemData.toplevels || []
+-                        if (tops.length >= 2 && root.itemData.isActive) {
+-                            var nextIdx = (root.realActiveTopIndex + 1) % tops.length
+-                            root.restoreOrLaunchRequested(root.itemData, nextIdx)
+-                        } else {
+-                            root.restoreOrLaunchRequested(root.itemData, root.realActiveTopIndex)
+-                        }
+-                    }
++                    if (root.itemData.toplevels && root.itemData.toplevels.length > 1)
++                        root.windowChooserClicked(root.itemData, root.itemIndex)
++                    else
++                        root.restoreOrLaunchRequested(root.itemData, root.realActiveTopIndex)
+                     root.previewTopIndex = -1
+                 }
+             } else if (mouse.button === Qt.RightButton) {
+diff --git c/DockPanel.qml w/DockPanel.qml
+index 2772708..b5b4802 100644
+--- c/DockPanel.qml
++++ w/DockPanel.qml
+@@ -52,9 +52,16 @@ Item {
+         return detectedBarTransparent
+     }
+ 
+-    // Static Standard Dock Geometry (Strictly stable, no jumping/twitching on window state)
+-    readonly property real slotSize: 42
+-    readonly property real iconBaseSize: 24
++    // A compact, quiet shelf: icons stay still so the dock remains legible.
++    readonly property real slotSize: 56
++    readonly property real iconBaseSize: 36
++    readonly property real shelfPadding: 8
++    readonly property real shelfRadius: 18
++    readonly property color shelfBackground: root.glassmorphism
++        ? Util.alpha(Color.bar.background, root.blurOpacity)
++        : Util.alpha(Color.bar.background, 0.9)
++    readonly property color shelfBorder: Qt.rgba(Color.bar.text.r, Color.bar.text.g, Color.bar.text.b,
++        0.12 + root.glassStrength * 0.12)
+ 
+     // Live 1D Rail Displacement for Main Dock Bar
+     property int dockDragActiveIndex: -1
+@@ -114,6 +121,7 @@ Item {
+         function setShowFolderTitles(val: string): string { root.showFolderTitles = (val === "true" || val === "1"); root.saveSettings(); return "ok" }
+         function setShowBadges(val: string): string { root.showBadges = (val === "true" || val === "1"); root.saveSettings(); return "ok" }
+         function setOverlayMode(val: string): string { root.overlayMode = (val === "true" || val === "1"); root.saveSettings(); return "ok" }
++        function openWindowChooser(appId: string): string { return root.openWindowChooser(appId) }
+         function ping(): string { return "ok" }
+     }
+ 
+@@ -366,6 +374,7 @@ Item {
+     property bool showBadges: true
+     property bool glassmorphism: false
+     property real blurOpacity: 0.68
++    property real glassStrength: 0.35
+     readonly property bool showAppMenu: root.widgetsEnabled && root.dockWidgets && (root.dockWidgets.indexOf("omarchy.apps") !== -1)
+     property string appMenuPosition: "left"
+     property bool widgetsEnabled: true
+@@ -582,13 +591,13 @@ Item {
+             autohideLeaveTimer.stop()
+             root.isDockHovered = true
+         } else {
+-            autohideLeaveTimer.restart()
++            if (!autohideLeaveTimer.running) autohideLeaveTimer.start()
+         }
+     }
+ 
+     Timer {
+         id: autohideLeaveTimer
+-        interval: 1500
++        interval: 650
+         repeat: false
+         onTriggered: {
+             if (!root.autohide) return
+@@ -644,6 +653,7 @@ Item {
+ 
+     readonly property bool isWorkspaceEmpty: root.activeWorkspaceWindowCount === 0
+     readonly property bool isDockActive: root.isDockHovered
++        || root.edgeRevealHeld
+         || root.isStackHovered
+         || root.isMenuHovered
+         || root.isWidgetPanelHovered
+@@ -651,6 +661,7 @@ Item {
+         || root.isMenuOpen
+         || root.isEditingFolderTitle
+         || root.isEditMode
++        || root.isWindowChooserOpen
+         || (root.widgetPicker && root.widgetPicker.opened)
+         || root.checkWidgetPanelsOpen()
+         || (root.dockDragActiveIndex >= 0)
+@@ -665,6 +676,131 @@ Item {
+         root.closePopups()
+     }
+ 
++    // One app stays one icon. Multiple windows are chosen from a brief,
++    // explicit preview strip above that icon instead of cycling on click.
++    property var activeWindowChooserItem: null
++    property int activeWindowChooserIndex: -1
++    property bool isWindowChooserHovered: false
++    property string chooserMode: "windows"
++    property bool chooserLatched: false
++    property bool chooserSourceHovered: false
++    readonly property bool isWindowChooserOpen: activeWindowChooserItem !== null
++    readonly property int windowChooserCount: activeWindowChooserItem && activeWindowChooserItem.toplevels
++        ? Math.min(4, activeWindowChooserItem.toplevels.length) : 0
++    readonly property real windowChooserWidth: Math.max(168, root.windowChooserCount * 156 + Math.max(0, root.windowChooserCount - 1) * 8 + 20)
++    readonly property real calculatedWindowChooserLeft: {
++        var screenW = (dockWindow && dockWindow.screen) ? dockWindow.screen.width : 1920
++        var dockW = root.isVertical ? (root.slotSize + root.shelfPadding * 2) : (root.totalDockDimension + root.shelfPadding * 2)
++        var dockLeft = (screenW - dockW) / 2
++        var appBaseOffset = root.hasLeftWidgets ? (root.leftWidgetsWidth + root.leftSeparatorSize) : 0
++        var iconCenter = dockLeft + root.shelfPadding + appBaseOffset
++            + root.appSlotOffset(root.activeWindowChooserIndex) + root.slotSize / 2
++        return Math.round(Math.max(8, Math.min(screenW - root.windowChooserWidth - 8, iconCenter - root.windowChooserWidth / 2)))
++    }
++
++    function showWindowChooser(item, index) {
++        if (!item || item.isStack || !item.toplevels || item.toplevels.length < 1) return
++        root.activeWindowChooserItem = item
++        root.activeWindowChooserIndex = index
++        root.isWindowChooserHovered = false
++        // Start a fallback dismissal immediately. Crossing from the icon to
++        // the chooser cancels it, but an interrupted hover never leaves a
++        // floating chooser behind.
++        windowChooserDismissTimer.stop()
++        root.chooserMode = "windows"
++    }
++
++    function scheduleWindowChooserDismiss() {
++        root.chooserSourceHovered = false
++        if (root.isWindowChooserOpen && !root.isWindowChooserHovered && !root.chooserLatched)
++            windowChooserDismissTimer.restart()
++    }
++
++    function holdWindowChooser() {
++        windowChooserDismissTimer.stop()
++    }
++
++    function closeWindowChooser() {
++        windowChooserDismissTimer.stop()
++        root.chooserLatched = false
++        root.chooserSourceHovered = false
++        root.isWindowChooserHovered = false
++        root.activeWindowChooserItem = null
++        root.activeWindowChooserIndex = -1
++    }
++
++    function selectWindowChooser(index) {
++        if (!root.activeWindowChooserItem) return
++        var top = root.activeWindowChooserItem.toplevels[index]
++        if (!top) return
++        root.activateChooserWindow(top)
++    }
++
++    function activateChooserWindow(top) {
++        var matches = Hyprland.toplevels.values.filter(function(candidate) { return candidate.wayland === top })
++        var address = matches.length ? String(matches[0].address || "").replace(/^0x/, "") : ""
++        if (/^[0-9a-fA-F]+$/.test(address)) {
++            Quickshell.execDetached(["hyprctl", "dispatch", 'hl.dsp.focus({window="address:0x' + address + '"})'])
++        } else if (top && typeof top.activate === "function") top.activate()
++        root.closeWindowChooser()
++    }
++
++    function showAppActions(item, index) {
++        root.closeWindowChooser()
++        root.activeWindowChooserItem = item
++        root.activeWindowChooserIndex = index
++        root.chooserMode = "actions"
++        root.chooserLatched = true
++    }
++
++    function runAppAction(action) {
++        var item = root.activeWindowChooserItem
++        if (!item) return
++        if (action === "pin") root.setPinned(DockModel.togglePinned(root.pinnedIds, item.appId, root.maxDockItems))
++        if (action === "launch") DockModel.launchApp(root.shell, item, Util)
++        if (action === "minimize") root.minimizeItem(item)
++        if (action === "windows") { root.chooserMode = "windows"; return }
++        root.closeWindowChooser()
++    }
++
++    function openWindowChooser(appId) {
++        var requested = String(appId || "").toLowerCase()
++        for (var i = 0; i < root.dockItems.length; i++) {
++            var item = root.dockItems[i]
++            if (!item || item.isStack || !item.toplevels || item.toplevels.length < 2) continue
++            var keys = [item.appId, item.desktopId, item.id]
++            for (var j = 0; j < keys.length; j++) {
++                if (String(keys[j] || "").toLowerCase() === requested) {
++                    root.showWindowChooser(item, i)
++                    return "ok"
++                }
++            }
++        }
++        return "not-found"
++    }
++
++    Timer {
++        id: windowChooserDismissTimer
++        interval: 550
++        repeat: false
++        onTriggered: {
++            if (!root.isWindowChooserHovered && !root.chooserSourceHovered && !root.chooserLatched) root.closeWindowChooser()
++        }
++    }
++
++    // The edge trigger vanishes as soon as the shelf is shown. Keep this
++    // short handoff latch alive until the pointer reaches the real shelf.
++    property bool edgeRevealHeld: false
++    Timer {
++        id: edgeHandoffTimer
++        interval: 1000
++        repeat: false
++        onTriggered: {
++            root.edgeRevealHeld = false
++            root.evaluateHoverState()
++        }
++    }
++
+     property double lastToggleRevealTime: 0
+ 
+     function toggleReveal(revealSource) {
+@@ -809,9 +945,15 @@ Item {
+         return total
+     }
+ 
+-    readonly property real leftSeparatorSize: hasLeftWidgets ? 8 : 0
++    readonly property int favoriteCount: root.dockItems.filter(function(item) { return item.isPinned || item.isStack }).length
++    readonly property real favoritesSeparatorSize: root.dockItems.length > root.favoriteCount && (root.favoriteCount > 0 || root.hasLeftWidgets) ? 16 : 0
++    readonly property real leftSeparatorSize: 0
+     readonly property real rightSeparatorSize: hasRightWidgets ? 8 : 0
+-    readonly property real itemsWidth: (root.dockItems.length * root.slotSize)
++    readonly property real itemsWidth: root.dockItems.length * root.slotSize + root.favoritesSeparatorSize
++
++    function appSlotOffset(index) {
++        return index * root.slotSize + (index >= root.favoriteCount ? root.favoritesSeparatorSize : 0)
++    }
+ 
+     // Dynamic max items limit for dock bar based on logical screen dimensions & scale (15 items on 1080p @ 1.6x, scales dynamically for Ultrawide 21:9 / 32:9)
+     readonly property var activeScreen: {
+@@ -907,6 +1049,8 @@ Item {
+                 if (s.glassmorphism !== undefined) {
+                     root.glassmorphism = (s.glassmorphism === true)
+                 }
++                if (s.glassStrength !== undefined && isFinite(Number(s.glassStrength)))
++                    root.glassStrength = Math.max(0, Math.min(1, Number(s.glassStrength)))
+                 if (s.blurOpacity !== undefined) {
+                     var bo = Number(s.blurOpacity)
+                     if (isFinite(bo) && bo >= 0.1 && bo <= 1.0) root.blurOpacity = bo
+@@ -951,6 +1095,7 @@ Item {
+             showBadges: root.showBadges,
+             glassmorphism: root.glassmorphism,
+             blurOpacity: root.blurOpacity,
++            glassStrength: root.glassStrength,
+             widgetsEnabled: root.widgetsEnabled,
+             appMenuPosition: root.appMenuPosition || "left",
+             widgetPosition: root.widgetPosition || "right",
+@@ -1685,6 +1830,13 @@ Item {
+     property int iconRevision: 0
+     property var pinnedIds: []
+     property var dockItems: []
++    onDockItemsChanged: {
++        if (!root.activeWindowChooserItem) return
++        var appId = root.activeWindowChooserItem.appId
++        var updated = root.dockItems.find(function(item) { return item.appId === appId })
++        if (updated) root.activeWindowChooserItem = updated
++        else root.closeWindowChooser()
++    }
+     property var appRows: (shell && shell.appLibrary) ? shell.appLibrary.sortedEntries("") : []
+ 
+     // Curated available symbols for folder icon personalization (Clean monochrome vector glyphs)
+@@ -1742,6 +1894,7 @@ Item {
+     }
+ 
+     function closePopups() {
++        root.closeWindowChooser()
+         root.activeStackItem = null
+         root.activeMenuItem = null
+         root.isEditMode = false
+@@ -2101,8 +2254,13 @@ Item {
+                         var normPending = pending.replace(/[^a-z0-9]/g, "")
+                         if (winClass === pending || (normPending.length > 0 && (normClass.indexOf(normPending) !== -1 || normPending.indexOf(normClass) !== -1))) {
+                             root.pendingFocusAppId = ""
+-                            var cleanAddr = (addr.indexOf("0x") === 0) ? addr : ("0x" + addr)
+-                            Util.execDetached("hyprctl dispatch focuswindow address:" + cleanAddr)
++                            var rawAddr = String(addr || "")
++                            var cleanAddr = (rawAddr.indexOf("0x") === 0) ? rawAddr : ("0x" + rawAddr)
++                            // Window addresses are data received from Hyprland.  Reject
++                            // anything outside its canonical format and use argv rather
++                            // than concatenating it into a shell command.
++                            if (/^0x[0-9a-fA-F]+$/.test(cleanAddr))
++                                Quickshell.execDetached(["hyprctl", "dispatch", "focuswindow", "address:" + cleanAddr])
+                         }
+                     }
+                 }
+@@ -2453,8 +2611,13 @@ Item {
+                 WlrLayershell.namespace: "omarchy-dock"
+                 WlrLayershell.layer: WlrLayer.Top
+                 WlrLayershell.keyboardFocus: root.isEditMode ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.None
+-                exclusionMode: root.dockRevealed && !root.overlayMode ? ExclusionMode.Auto : ExclusionMode.Ignore
++                exclusionMode: !root.autohide && root.dockRevealed && !root.overlayMode ? ExclusionMode.Auto : ExclusionMode.Ignore
+                 color: "transparent"
++                mask: Region {
++                    x: 0; y: 0
++                    width: root.shouldSlideOut ? 0 : dockLayer.width
++                    height: root.shouldSlideOut ? 0 : dockLayer.height
++                }
+ 
+                 anchors {
+                     top: root.barPosition === "bottom"
+@@ -2464,19 +2627,23 @@ Item {
+                 }
+ 
+                 margins {
+-                    bottom: (!root.isVertical && root.barPosition === "top") ? (Style.gapsOut || 5) : 0
+-                    top: (!root.isVertical && root.barPosition === "bottom") ? (Style.gapsOut || 5) : 0
+-                    right: (root.isVertical && root.barPosition === "left") ? (Style.gapsOut || 5) : 0
+-                    left: (root.isVertical && root.barPosition === "right") ? (Style.gapsOut || 5) : 0
++                    bottom: (!root.isVertical && root.barPosition === "top") ? Math.max(Style.gapsOut || 5, 12) : 0
++                    top: (!root.isVertical && root.barPosition === "bottom") ? Math.max(Style.gapsOut || 5, 12) : 0
++                    right: (root.isVertical && root.barPosition === "left") ? Math.max(Style.gapsOut || 5, 12) : 0
++                    left: (root.isVertical && root.barPosition === "right") ? Math.max(Style.gapsOut || 5, 12) : 0
+                 }
+ 
+-                implicitWidth: root.isVertical ? (root.slotSize + 8) : Math.max(root.slotSize + 8, root.totalDockDimension + 14)
+-                implicitHeight: root.isVertical ? Math.max(root.slotSize + 8, root.totalDockDimension + 14) : (root.slotSize + 8)
++                implicitWidth: root.isVertical ? (root.slotSize + root.shelfPadding * 2) : Math.max(root.slotSize + root.shelfPadding * 2, root.totalDockDimension + root.shelfPadding * 2)
++                implicitHeight: root.isVertical ? Math.max(root.slotSize + root.shelfPadding * 2, root.totalDockDimension + root.shelfPadding * 2) : (root.slotSize + root.shelfPadding * 2)
+ 
+                 HoverHandler {
+                     id: dockHoverHandler
+                     enabled: root.autohide && !root.shouldSlideOut
+                     onHoveredChanged: {
++                        if (hovered) {
++                            root.edgeRevealHeld = false
++                            edgeHandoffTimer.stop()
++                        }
+                         root.evaluateHoverState()
+                     }
+                 }
+@@ -2485,8 +2652,8 @@ Item {
+         Rectangle {
+             id: dockSurface
+             anchors.centerIn: parent
+-            width: root.isVertical ? (root.slotSize + 4) : Math.max(root.slotSize + 4, root.totalDockDimension + 8)
+-            height: root.isVertical ? Math.max(root.slotSize + 4, root.totalDockDimension + 8) : (root.slotSize + 4)
++            width: root.isVertical ? (root.slotSize + root.shelfPadding * 2) : Math.max(root.slotSize + root.shelfPadding * 2, root.totalDockDimension + root.shelfPadding * 2)
++            height: root.isVertical ? Math.max(root.slotSize + root.shelfPadding * 2, root.totalDockDimension + root.shelfPadding * 2) : (root.slotSize + root.shelfPadding * 2)
+             visible: root.dockMapped
+             opacity: root.isDockVisualReady ? 1.0 : 0.0
+             Behavior on opacity { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+@@ -2504,27 +2671,44 @@ Item {
+                 root.isEditMode = false
+             }
+ 
+-            color: root.isBarTransparent
+-                ? Util.alpha(Color.bar.background, 0.25)
+-                : Color.bar.background
+-            border.width: (Border.canUseNative(root.dockBorderSpec) && !root.isBarTransparent) ? Border.uniformWidth(root.dockBorderSpec) : 0
+-            border.color: (Border.canUseNative(root.dockBorderSpec) && !root.isBarTransparent) ? Border.color(root.dockBorderSpec) : "transparent"
+-            radius: root.systemRounding
++            color: root.shelfBackground
++            border.width: 1
++            border.color: root.shelfBorder
++            radius: root.shelfRadius
+             antialiasing: true
+             smooth: true
+ 
+             Loader {
+                 anchors.fill: parent
+-                active: !root.isBarTransparent && Border.needsOverlay(root.dockBorderSpec)
++                active: !root.glassmorphism && !root.isBarTransparent && Border.needsOverlay(root.dockBorderSpec)
+                 sourceComponent: DockBorderOverlay {
+                     anchors.fill: parent
+-                    radius: root.systemRounding
++                    radius: root.shelfRadius
+                     borderSpec: root.dockBorderSpec
+                     animated: root.borderAngleAnimationEnabled
+                     animationDuration: root.borderAngleAnimationDuration
+                 }
+             }
+ 
++            // A restrained inner keyline makes the glass shelf feel finished
++            // on both dark and light Omarchy themes.
++            Rectangle {
++                anchors.fill: parent
++                anchors.margins: 1
++                radius: Math.max(0, parent.radius - 1)
++                opacity: root.glassStrength
++                Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
++                gradient: Gradient {
++                    GradientStop { position: 0; color: Qt.rgba(1, 1, 1, 0.16) }
++                    GradientStop { position: 0.42; color: Qt.rgba(1, 1, 1, 0.025) }
++                    GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.12) }
++                }
++                border.width: 1
++                border.color: Qt.rgba(Color.bar.text.r, Color.bar.text.g, Color.bar.text.b, 0.08)
++                antialiasing: true
++                z: 0
++            }
++
+             Behavior on color { ColorAnimation { duration: 300; easing.type: Easing.InOutCubic } }
+             Behavior on border.color { ColorAnimation { duration: 300; easing.type: Easing.InOutCubic } }
+             Behavior on border.width { NumberAnimation { duration: 250; easing.type: Easing.InOutCubic } }
+@@ -2545,18 +2729,18 @@ Item {
+                 id: autohideTranslate
+                 x: {
+                     if (!root.shouldSlideOut) return 0
+-                    if (root.barPosition === "right") return -56
+-                    if (root.barPosition === "left") return 56
++                    if (root.barPosition === "right") return -(dockSurface.width + 24)
++                    if (root.barPosition === "left") return dockSurface.width + 24
+                     return 0
+                 }
+                 y: {
+                     if (!root.shouldSlideOut) return 0
+-                    if (root.barPosition === "top") return 56
+-                    if (root.barPosition === "bottom") return -56
++                    if (root.barPosition === "top") return dockSurface.height + 24
++                    if (root.barPosition === "bottom") return -(dockSurface.height + 24)
+                     return 0
+                 }
+-                Behavior on x { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+-                Behavior on y { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
++                Behavior on x { NumberAnimation { duration: root.shouldSlideOut ? 180 : 300; easing.type: root.shouldSlideOut ? Easing.InCubic : Easing.OutQuint } }
++                Behavior on y { NumberAnimation { duration: root.shouldSlideOut ? 180 : 300; easing.type: root.shouldSlideOut ? Easing.InCubic : Easing.OutQuint } }
+             }
+ 
+             Behavior on radius { NumberAnimation { duration: 200 } }
+@@ -2741,20 +2925,20 @@ Item {
+                 // 2. Left Sleek Separator between Left Widgets and Apps
+                 Item {
+                     id: leftDockSeparator
+-                    visible: root.hasLeftWidgets
+-                    opacity: root.hasLeftWidgets ? 1.0 : 0.0
+-                    x: root.isVertical ? 0 : root.leftWidgetsWidth
+-                    y: root.isVertical ? root.leftWidgetsWidth : 0
+-                    width: root.isVertical ? root.slotSize : root.leftSeparatorSize
+-                    height: root.isVertical ? root.leftSeparatorSize : root.slotSize
++                    visible: root.favoritesSeparatorSize > 0
++                    opacity: visible ? 1.0 : 0.0
++                    x: root.isVertical ? 0 : root.leftWidgetsWidth + root.favoriteCount * root.slotSize
++                    y: root.isVertical ? root.leftWidgetsWidth + root.favoriteCount * root.slotSize : 0
++                    width: root.isVertical ? root.slotSize : root.favoritesSeparatorSize
++                    height: root.isVertical ? root.favoritesSeparatorSize : root.slotSize
+                     z: 0
+ 
+                     Rectangle {
+                         anchors.centerIn: parent
+-                        width: root.isVertical ? (root.slotSize - 18) : 1.5
+-                        height: root.isVertical ? 1.5 : (root.slotSize - 18)
++                        width: root.isVertical ? 26 : 1
++                        height: root.isVertical ? 1 : 26
+                         radius: 0.75
+-                        color: Color.composed("popups.border", "popups.border-alpha", Color.border, 0.45)
++                        color: Util.alpha(Color.bar.text, 0.18)
+                     }
+                 }
+ 
+@@ -2770,6 +2954,7 @@ Item {
+                         shell: root.shell
+                         slotSize: root.slotSize
+                         iconBaseSize: root.iconBaseSize
++                        proximity: 0
+                         iconRevision: root.iconRevision
+                         iconsReady: root.iconsReady
+                         systemBorderSize: root.systemBorderSize
+@@ -2780,8 +2965,8 @@ Item {
+                         // 1D Live Rail Displacement (with Left Widget offset)
+                         readonly property real appBaseOffset: (root.hasLeftWidgets ? (root.leftWidgetsWidth + root.leftSeparatorSize) : 0)
+                         readonly property int visualSlot: (root.dockDragActiveIndex === index) ? index : root.getDockVisualSlot(index, root.dockDragActiveIndex, root.dockDragTargetIndex)
+-                        x: root.isVertical ? 0 : (appBaseOffset + visualSlot * root.slotSize)
+-                        y: root.isVertical ? (appBaseOffset + visualSlot * root.slotSize) : 0
++                        x: root.isVertical ? 0 : (appBaseOffset + root.appSlotOffset(visualSlot))
++                        y: root.isVertical ? (appBaseOffset + root.appSlotOffset(visualSlot)) : 0
+ 
+                         Behavior on x { enabled: root.dockDragActiveIndex >= 0; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+                         Behavior on y { enabled: root.dockDragActiveIndex >= 0; NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+@@ -2803,11 +2988,25 @@ Item {
+                             root.setPinned(DockModel.togglePinned(root.pinnedIds, appId, root.maxDockItems))
+                         }
+ 
++                        onWindowChooserRequested: function(item, itemIndex) {
++                            if (root.chooserMode === "actions" && root.isWindowChooserOpen) return
++                            root.chooserSourceHovered = true
++                            root.showWindowChooser(item, itemIndex)
++                        }
++
++                        onWindowChooserClicked: function(item, itemIndex) {
++                            root.showWindowChooser(item, itemIndex)
++                            root.chooserLatched = true
++                        }
++
++                        onWindowChooserDismissRequested: root.scheduleWindowChooserDismiss()
++
+                         onOriginalAppLaunched: function(appId) {
+                             root.requestFocusOnLaunch(appId)
+                         }
+ 
+                         onRestoreOrLaunchRequested: function(item, targetIndex) {
++                            root.closeWindowChooser()
+                             root.restoreOrLaunchItem(item, targetIndex)
+                         }
+ 
+@@ -2843,7 +3042,7 @@ Item {
+                                 return
+                             }
+                             if (item) {
+-                                root.minimizeItem(item)
++                                root.showAppActions(item, index)
+                             }
+                         }
+ 
+@@ -2899,10 +3098,10 @@ Item {
+ 
+                     Rectangle {
+                         anchors.centerIn: parent
+-                        width: root.isVertical ? (root.slotSize - 18) : 1.5
+-                        height: root.isVertical ? 1.5 : (root.slotSize - 18)
++                        width: root.isVertical ? 26 : 1
++                        height: root.isVertical ? 1 : 26
+                         radius: 0.75
+-                        color: Color.composed("popups.border", "popups.border-alpha", Color.border, 0.45)
++                        color: Util.alpha(Color.bar.text, 0.18)
+                     }
+                 }
+ 
+@@ -3157,10 +3356,17 @@ Item {
+                             anchors.fill: parent
+                             hoverEnabled: true
+                             acceptedButtons: Qt.NoButton
+-                            onEntered: {
+-                                // Cursor reached the screen edge — show the dock
+-                                root.isDockHovered = true
+-                                autohideLeaveTimer.restart()
++                            onEntered: edgeDwell.restart()
++                            onExited: edgeDwell.stop()
++                            Timer {
++                                id: edgeDwell
++                                interval: 110
++                                onTriggered: {
++                                    root.edgeRevealHeld = true
++                                    edgeHandoffTimer.restart()
++                                    root.isDockHovered = true
++                                    autohideLeaveTimer.stop()
++                                }
+                             }
+                         }
+                     }
+@@ -3168,4 +3374,11 @@ Item {
+             }
+         }
+     }
++
++    // Focus picker for applications with more than one open window.
++    WindowChooser {
++        id: windowChooser
++        root: root
++        dockWindow: root.dockWindow
++    }
+ }
+diff --git c/DockPinned.js w/DockPinned.js
+index 403805c..b943611 100644
+--- c/DockPinned.js
++++ w/DockPinned.js
+@@ -436,6 +436,8 @@ function reorderPinned(pinnedList, dockItems, fromIndex, toIndex) {
+     var sourceItem = dockItems[fromIndex];
+     var targetItem = dockItems[toIndex];
+     if (!sourceItem || !targetItem) return pinnedList;
++    // Rearranging transient apps must not silently turn them into favorites.
++    if (!sourceItem.isPinned && !sourceItem.isStack && !targetItem.isPinned && !targetItem.isStack) return pinnedList;
+ 
+     var srcId = sourceItem.isStack ? sourceItem.id : stripDesktop(sourceItem.appId);
+     var tgtId = targetItem.isStack ? targetItem.id : stripDesktop(targetItem.appId);
+diff --git c/DockSettings.js w/DockSettings.js
+index 7c00d4b..0ffe250 100644
+--- c/DockSettings.js
++++ w/DockSettings.js
+@@ -65,7 +65,7 @@ function shouldSlideOut(visibilityMode, visibilityOverride, dockActive, workspac
+     var mode = normalizeVisibilityMode(visibilityMode, false)
+     if (mode === VISIBILITY_ALWAYS) return false
+     if (mode === VISIBILITY_KEYBIND) return true
+-    return dockActive !== true && workspaceEmpty !== true
++    return dockActive !== true
+ }
+ 
+ function keyboardToggleAllowed(visibilityMode, autohide) {
+diff --git c/tests/tst_DockSettings.qml w/tests/tst_DockSettings.qml
+index 7981b8f..a04603d 100644
+--- c/tests/tst_DockSettings.qml
++++ w/tests/tst_DockSettings.qml
+@@ -111,7 +111,7 @@ TestCase {
+             { tag: "always-keybind-shown", mode: "always", override: 1, active: false, empty: false, hidden: false },
+             { tag: "hover-active", mode: "hover", override: 0, active: true, empty: false, hidden: false },
+             { tag: "hover-inactive", mode: "hover", override: 0, active: false, empty: false, hidden: true },
+-            { tag: "hover-empty", mode: "hover", override: 0, active: false, empty: true, hidden: false },
++            { tag: "hover-empty", mode: "hover", override: 0, active: false, empty: true, hidden: true },
+             { tag: "hover-keybind-hidden", mode: "hover", override: -1, active: true, empty: true, hidden: true },
+             { tag: "hover-keybind-shown", mode: "hover", override: 1, active: false, empty: false, hidden: false },
+             { tag: "keybind-follow", mode: "keybind", override: 0, active: true, empty: true, hidden: true },

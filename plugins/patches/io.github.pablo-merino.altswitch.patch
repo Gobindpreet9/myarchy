@@ -1,0 +1,25 @@
+diff --git c/altswitch.lua w/altswitch.lua
+index 1909148..abd078c 100644
+--- c/altswitch.lua
++++ w/altswitch.lua
+@@ -75,7 +75,7 @@ local function altswitch_commit()
+   -- window handles do not survive it: reading `.address` afterwards throws
+   -- inside the key callback, which silently loses the switch.
+   local target = altswitch.windows[altswitch.index]
+-  local address = target and target.address
++  local address = target and tostring(target.address or "") or ""
+ 
+   altswitch_teardown()
+ 
+@@ -84,7 +84,10 @@ local function altswitch_commit()
+   -- until the next input event, so the switch looks like it did nothing until
+   -- you tap a key again. Going through hyprctl runs the same dispatcher from
+   -- outside the input callback, where it takes effect at once.
+-  if address then
++  -- A window address comes from Hyprland, but it still crosses a command
++  -- boundary below.  Treat it as untrusted data and accept only Hyprland's
++  -- canonical hexadecimal form before constructing the dispatcher payload.
++  if address:match("^0x[%da-fA-F]+$") then
+     local focus = string.format('hl.dsp.focus({ window = "address:%s" })', address)
+     hl.exec_cmd("hyprctl dispatch " .. shell_quote(focus))
+   end

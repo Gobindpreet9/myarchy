@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "scope": "Omarchy desktop customizations only",
+  "files": [
+    {
+      "path": "config/hypr/hyprland.lua",
+      "restore_to": ".config/hypr/hyprland.lua",
+      "mode": "0644",
+      "sha256": "54ee59b4709ba3debfe33333b6ebcaecb959fca6af22f9629572267f9901f8c6"
+    },
+    {
+      "path": "config/hypr/bindings.lua",
+      "restore_to": ".config/hypr/bindings.lua",
+      "mode": "0644",
+      "sha256": "b4d2c5571b721d0211220ca484ba41c0f47703a4ec0ea5a2f4cbb7dea1a32161"
+    },
+    {
+      "path": "config/hypr/monitors.lua",
+      "restore_to": ".config/hypr/monitors.lua",
+      "mode": "0644",
+      "sha256": "96e12b8a2c52bf7bc6a3309aaf0226cbb8ac2ba24043d030428fa11fc0cc216a"
+    },
+    {
+      "path": "config/hypr/input.lua",
+      "restore_to": ".config/hypr/input.lua",
+      "mode": "0644",
+      "sha256": "1acb471814ff1d25aa52e612ddf24f3dc8136ce033242185e17e408865bdfe97"
+    },
+    {
+      "path": "config/hypr/looknfeel.lua",
+      "restore_to": ".config/hypr/looknfeel.lua",
+      "mode": "0644",
+      "sha256": "a1d537d384d8d4b99e09f623fc764bb4682b1acb9a69d39a2417e23122b1ea28"
+    },
+    {
+      "path": "config/hypr/windows.lua",
+      "restore_to": ".config/hypr/windows.lua",
+      "mode": "0644",
+      "sha256": "e9b8acf8b6843ee4c698da7ff2ad60b8ff6c0de15e81edc6612eafa09067b7d9"
+    },
+    {
+      "path": "config/hypr/omasettings.lua",
+      "restore_to": ".config/hypr/omasettings.lua",
+      "mode": "0644",
+      "sha256": "0948c44354cfcde35b8e47912e9f5ef374384ac537ed15756ef2ca42856b314e"
+    },
+    {
+      "path": "config/hypr/keybind-remap-hook.lua",
+      "restore_to": ".config/hypr/keybind-remap-hook.lua",
+      "mode": "0644",
+      "sha256": "188bd7d0a3b1c518b7176c033d42b5059118a3d04ea6674d6f38a68a57f1964e"
+    },
+    {
+      "path": "config/hypr/keybind-remaps.lua",
+      "restore_to": ".config/hypr/keybind-remaps.lua",
+      "mode": "0600",
+      "sha256": "0921bebb407950256f8b0857156b396ec7cfe58da4b62dbdf57bec7ec55f00b7"
+    },
+    {
+      "path": "config/hypr/hyprsunset.conf",
+      "restore_to": ".config/hypr/hyprsunset.conf",
+      "mode": "0644",
+      "sha256": "8674c758b41d2308fd194e08b81957e89ce16ba1839087b9ce4eda5149026e3c"
+    },
+    {
+      "path": "config/hypr/xdph.conf",
+      "restore_to": ".config/hypr/xdph.conf",
+      "mode": "0644",
+      "sha256": "2fded88a27b89f33cbc2b64a1258117df74b591f39a84c78ec3504a7d3b09136"
+    },
+    {
+      "path": "config/hypr/scripts/browser-focus-or-launch.sh",
+      "restore_to": ".config/hypr/scripts/browser-focus-or-launch.sh",
+      "mode": "0755",
+      "sha256": "9f2d62e8cc6d34c96d04fee2281ba695b0b8e32a0fe6e116b02579228dc7ff9e"
+    },
+    {
+      "path": "config/hypr/scripts/hermes-desktop.sh",
+      "restore_to": ".config/hypr/scripts/hermes-desktop.sh",
+      "mode": "0755",
+      "sha256": "a61c79583949f82dd542e2ecf47b467da59de59d910475c005a3655938cc7699"
+    },
+    {
+      "path": "config/omarchy/shell.json",
+      "restore_to": ".config/omarchy/shell.json",
+      "mode": "0644",
+      "sha256": "d76edc1ff97f147a70bc8c7ce69e3e431ce5af653c873af1d605782f909b8b83"
+    },
+    {
+      "path": "config/omarchy/shell.toml",
+      "restore_to": ".config/omarchy/shell.toml",
+      "mode": "0600",
+      "sha256": "ed8f93069ac4bed9abdc6c03f0126232ba1f1b64622aac1e040f83b1e70b1bbc"
+    },
+    {
+      "path": "config/omarchy/dock-settings.json",
+      "restore_to": ".config/omarchy/dock-settings.json",
+      "mode": "0644",
+      "sha256": "e88b4114194d751fab8c342b8d8ec257464b76afa21eed1ac0c9a5a0d65c6b6d"
+    },
+    {
+      "path": "config/omarchy/dock-pinned.json",
+      "restore_to": ".config/omarchy/dock-pinned.json",
+      "mode": "0644",
+      "sha256": "97bce8b8bfff411febd2068aa6fd7045919f8ebadd654455952ea8f28e6b0b18"
+    },
+    {
+      "path": "config/omarchy/extensions/omarchy-menu.jsonc",
+      "restore_to": ".config/omarchy/extensions/omarchy-menu.jsonc",
+      "mode": "0644",
+      "sha256": "e2584f4ba01232bdbbbeb0d43a6ccc812dfbb11636c224599ee2004a10abba34"
+    },
+    {
+      "path": "config/omarchy/branding/about.txt",
+      "restore_to": ".config/omarchy/branding/about.txt",
+      "mode": "0644",
+      "sha256": "5fe8adced2fe67e410e177477a7272d1807b3fedc81fbc3f030dd479bc046b76"
+    },
+    {
+      "path": "config/omarchy/branding/screensaver.txt",
+      "restore_to": ".config/omarchy/branding/screensaver.txt",
+      "mode": "0644",
+      "sha256": "2491e221490f087b4a464ed9f00964fdefb2f15c8de5a8b1e9821b390a7bd59c"
+    },
+    {
+      "path": "config/omarchy/lock-designs/River.qml",
+      "restore_to": ".config/omarchy/lock-designs/River.qml",
+      "mode": "0644",
+      "sha256": "e3476ef05ef7930e1e7d06f60cb26dad4e6cd059c122a0d7cef430d65b8311df"
+    },
+    {
+      "path": "config/omarchy/hooks/theme-set.d/omazed",
+      "restore_to": ".config/omarchy/hooks/theme-set.d/omazed",
+      "mode": "0755",
+      "sha256": "9e7064173115c5556ab4ea35ebd520cae680afe5442a26431ec030737b3f75f9"
+    },
+    {
+      "path": "config/omarchy/scripts/rip.sh",
+      "restore_to": ".config/omarchy/scripts/rip.sh",
+      "mode": "0755",
+      "sha256": "3cdb944f0e56562d8f68fa5386edde4be3c7eee8cff598ec34d76f33bdf037ae"
+    }
+  ]
+}

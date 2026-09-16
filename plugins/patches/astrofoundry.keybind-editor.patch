@@ -1,0 +1,142 @@
+diff --git c/KeybindEditor.qml w/KeybindEditor.qml
+index 4a6e0af..2c959b5 100644
+--- c/KeybindEditor.qml
++++ w/KeybindEditor.qml
+@@ -114,9 +114,7 @@ Item {
+     interval: 150
+     repeat: false
+     onTriggered: {
+-      if (root.lastFocusedAddress)
+-        root.dispatchCompat('hl.dsp.focus({ window = "address:' + root.lastFocusedAddress + '" })',
+-                            "focuswindow address:" + root.lastFocusedAddress)
++      if (root.lastFocusedAddress) root.refocusAddress(root.lastFocusedAddress)
+     }
+   }
+ 
+@@ -205,8 +203,19 @@ Item {
+   // Lua, so use the hl.dsp form and fall back to the native dispatcher for
+   // non-Lua builds (the same pattern omarchy's own scripts use).
+   function dispatchCompat(luaExpr, nativeArgs) {
+-    Quickshell.execDetached(["bash", "-c",
+-      "hyprctl dispatch '" + luaExpr + "' 2>/dev/null || hyprctl dispatch " + nativeArgs])
++    // Keep the compatibility fallback, but pass both dispatcher expressions as
++    // positional arguments. A window address comes from IPC and must never be
++    // interpolated into a shell program.
++    Quickshell.execDetached(["sh", "-c",
++      "hyprctl dispatch \"$1\" 2>/dev/null || hyprctl dispatch \"$2\"",
++      "keybind-editor-dispatch", String(luaExpr), String(nativeArgs)])
++  }
++
++  function refocusAddress(address) {
++    var value = String(address || "")
++    if (!/^0x[0-9a-fA-F]+$/.test(value)) return
++    root.dispatchCompat('hl.dsp.focus({ window = "address:' + value + '" })',
++                        "focuswindow address:" + value)
+   }
+ 
+   function setBindsSuspended(suspended) {
+diff --git c/install.sh w/install.sh
+index 322aace..c7c1934 100755
+--- c/install.sh
++++ w/install.sh
+@@ -18,13 +18,56 @@ hypr_dir="$HOME/.config/hypr"
+ src_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ main="$hypr_dir/hyprland.lua"
+ require_line='require("hypr.keybind-remap-hook")'
++hook="$hypr_dir/keybind-remap-hook.lua"
++remaps="$hypr_dir/keybind-remaps.lua"
++backup_dir=""
++committed=0
+ 
+ [[ -f $main ]] || { echo "install: $main not found — is this an Omarchy system?" >&2; exit 1; }
++[[ ! -L $main && ! -L $hook && ! -L $remaps ]] || {
++  echo "install: refusing to write through a symlink in $hypr_dir" >&2
++  exit 1
++}
+ 
+-install -m 0644 "$src_dir/hypr/keybind-remap-hook.lua" "$hypr_dir/keybind-remap-hook.lua"
++# This installer changes files Hyprland loads at startup. Snapshot only the
++# files it owns, write replacements atomically, and restore the snapshot if a
++# reload or config validation fails. The snapshot is deliberately retained on
++# success as a user-visible rollback point.
++backup_dir=$(mktemp -d "$hypr_dir/.keybind-editor-backup.XXXXXX")
++cp -p -- "$main" "$backup_dir/hyprland.lua"
++for name in keybind-remap-hook.lua keybind-remaps.lua; do
++  if [[ -e $hypr_dir/$name ]]; then
++    cp -p -- "$hypr_dir/$name" "$backup_dir/$name"
++  else
++    : >"$backup_dir/$name.absent"
++  fi
++done
+ 
+-if [[ ! -f $hypr_dir/keybind-remaps.lua ]]; then
+-  cat >"$hypr_dir/keybind-remaps.lua" <<'EOF'
++rollback() {
++  local status=$?
++  if (( ! committed )); then
++    cp -p -- "$backup_dir/hyprland.lua" "$main"
++    for name in keybind-remap-hook.lua keybind-remaps.lua; do
++      if [[ -f $backup_dir/$name.absent ]]; then
++        rm -f -- "$hypr_dir/$name"
++      else
++        cp -p -- "$backup_dir/$name" "$hypr_dir/$name"
++      fi
++    done
++    hyprctl reload >/dev/null 2>&1 || true
++    echo "install: restored the pre-install configuration from $backup_dir" >&2
++  fi
++  exit "$status"
++}
++trap rollback EXIT
++
++hook_tmp=$(mktemp "$hypr_dir/.keybind-remap-hook.XXXXXX")
++install -m 0644 "$src_dir/hypr/keybind-remap-hook.lua" "$hook_tmp"
++mv -f -- "$hook_tmp" "$hook"
++
++if [[ ! -f $remaps ]]; then
++  remaps_tmp=$(mktemp "$hypr_dir/.keybind-remaps.XXXXXX")
++  cat >"$remaps_tmp" <<'EOF'
+ -- Managed by the Astro Keybind Editor plugin (astrofoundry.keybind-editor).
+ -- Maps an original key combo (normalized) to its replacement.
+ -- An empty replacement removes the bind entirely (editor override).
+@@ -32,10 +75,12 @@ if [[ ! -f $hypr_dir/keybind-remaps.lua ]]; then
+ return {
+ }
+ EOF
++  mv -f -- "$remaps_tmp" "$remaps"
+ fi
+ 
+ if ! grep -qF "$require_line" "$main"; then
+-  cp "$main" "$main.bak.keybind-editor"
++  cp -p -- "$main" "$main.bak.keybind-editor"
++  main_tmp=$(mktemp "$hypr_dir/.hyprland.keybind-editor.XXXXXX")
+   if ! awk -v line="$require_line" '
+     !done && /require\("default\.hypr\.omarchy"\)/ {
+       print "-- Astro Keybind Editor remap layer; must load before the Omarchy defaults."
+@@ -45,13 +90,13 @@ if ! grep -qF "$require_line" "$main"; then
+     }
+     { print }
+     END { exit done ? 0 : 1 }
+-  ' "$main" >"$main.tmp"; then
+-    rm -f "$main.tmp"
++  ' "$main" >"$main_tmp"; then
++    rm -f -- "$main_tmp"
+     echo "install: could not find require(\"default.hypr.omarchy\") in $main." >&2
+     echo "Add this line manually before the Omarchy defaults load: $require_line" >&2
+     exit 1
+   fi
+-  mv "$main.tmp" "$main"
++  mv -f -- "$main_tmp" "$main"
+ fi
+ 
+ hyprctl reload >/dev/null
+@@ -62,6 +107,9 @@ if [[ -n $errors && ${errors,,} != *"no errors"* ]]; then
+   exit 1
+ fi
+ 
++committed=1
++trap - EXIT
++
+ cat <<'EOF'
+ Astro Keybind Editor hook installed.
+ 

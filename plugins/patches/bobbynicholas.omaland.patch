@@ -1,0 +1,72 @@
+diff --git c/Service.qml w/Service.qml
+index ad93325..15f004e 100644
+--- c/Service.qml
++++ w/Service.qml
+@@ -33,7 +33,11 @@ QtObject {
+   // Component.onCompleted, and a binding on it has not re-evaluated by the
+   // time this fires, so the paths are built here rather than bound.
+   onManifestChanged: {
+-    var dir = manifest && manifest.__sourceDir
++    // Omarchy strips __sourceDir from third-party manifests before supplying
++    // them to plugin QML. Fall back to this pinned plugin's manifest-ID path.
++    var dir = manifest && manifest.__sourceDir ? String(manifest.__sourceDir).replace(/^file:\/\//, "")
++      : Quickshell.env("HOME") + "/.config/omarchy/plugins/"
++        + String(manifest && manifest.id ? manifest.id : "bobbynicholas.omaland")
+     if (installed || !dir) return
+     installed = true
+     Quickshell.execDetached(["sh", "-c", installScript, "sh",
+diff --git c/read.lua w/read.lua
+index f19edfa..0817976 100644
+--- c/read.lua
++++ w/read.lua
+@@ -1,6 +1,7 @@
+--- Reads a chunk of Hyprland Lua config by running it against recording stubs,
+--- and reports what it set. Lua reading Lua, so there is no second grammar to
+--- keep in sync with Hyprland's.
++-- Reads Omaland's data-only Lua blocks against recording stubs and reports
++-- what they set.  The chunk never receives the process globals: a manually
++-- edited block can describe settings, but cannot reach files, processes,
++-- package loading, or the real Hyprland API.
+ --
+ --   lua read.lua <path>        run a file  (Omarchy's shipped looknfeel.lua)
+ --   lua read.lua -e <source>   run a string (an Omaland managed block)
+@@ -70,13 +71,38 @@ else
+   file:close()
+ end
+ 
+-local chunk, loadErr = load(source, name, "t")
++-- The renderer emits only literals and calls to these two recording APIs.
++-- Keep the evaluation environment deliberately small.  This is not a general
++-- Lua sandbox for arbitrary programs; it is a parser boundary for Omaland's
++-- own fenced, data-only format.
++local environment = {
++  hl = hl,
++  o = o,
++  tostring = tostring,
++  tonumber = tonumber,
++  type = type,
++  pairs = pairs,
++  ipairs = ipairs,
++  math = { abs = math.abs, ceil = math.ceil, floor = math.floor, max = math.max, min = math.min },
++  string = { format = string.format, lower = string.lower, upper = string.upper },
++  table = { concat = table.concat, insert = table.insert },
++}
++
++local chunk, loadErr = load(source, name, "t", environment)
+ if not chunk then
+   io.stderr:write(tostring(loadErr))
+   os.exit(1)
+ end
+ 
++-- A bounded instruction budget keeps malformed hand-edited blocks from
++-- freezing the shell's reader subprocess.  The hook is owned by this trusted
++-- parser and is removed immediately after the chunk returns.
++local limit = 100000
++debug.sethook(function()
++  error("omaland reader rejected a block that exceeded its instruction budget")
++end, "", limit)
+ local ok, runErr = pcall(chunk)
++debug.sethook()
+ if not ok then
+   io.stderr:write(tostring(runErr))
+   os.exit(1)

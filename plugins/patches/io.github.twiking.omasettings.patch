@@ -1,0 +1,123 @@
+diff --git c/SettingsWindow.qml w/SettingsWindow.qml
+index 60cb2d4..ab6b2a0 100644
+--- c/SettingsWindow.qml
++++ w/SettingsWindow.qml
+@@ -44,7 +44,9 @@ Item {
+     openedOn = focusedScreen()
+     window.visible = true
+     refresh()
+-    if (!selfCheckProcess.running) selfCheckProcess.running = true
++    // Network update checks are deliberately user-initiated from the Plugins
++    // page. Opening a settings window must not contact every configured Git
++    // remote in the background.
+   }
+   function hide() { window.visible = false }
+   function close() { hide() }
+@@ -371,8 +373,8 @@ Item {
+   // the way it was found. The helper knows which is which.
+   function resetSetting(key) { run(["reset", key]) }
+ 
+-  // Whether this window is itself behind its remote. The cached answer draws
+-  // the corner at once; the check behind it corrects the cache a moment later.
++  // Whether this window is itself behind its remote. The cached answer is
++  // refreshed only by an explicit update check on the Plugins page.
+   readonly property var selfUpdate: state.selfUpdate !== undefined ? state.selfUpdate : ({})
+   readonly property int selfBehind: selfUpdate.behind !== undefined ? Number(selfUpdate.behind) : 0
+   readonly property string selfId: selfUpdate.id !== undefined ? String(selfUpdate.id) : ""
+@@ -380,8 +382,8 @@ Item {
+   Process {
+     id: selfCheckProcess
+     command: ["bash", root.helperPath, "plugin", "self-check"]
+-    // Once per opening, and never on the path of anything the user is waiting
+-    // for: a fetch is a network round trip.
++    // Kept for the explicit CLI action (`plugin self-check`). The window never
++    // starts it implicitly because a fetch is an external network request.
+     running: false
+     onRunningChanged: if (!running) Qt.callLater(function() { root.refresh() })
+   }
+diff --git c/lib/hypr.sh w/lib/hypr.sh
+index 316ff6c..2ee83f7 100644
+--- c/lib/hypr.sh
++++ w/lib/hypr.sh
+@@ -192,6 +192,24 @@ lua_value() {
+   esac
+ }
+ 
++# A Lua string is not a shell string.  In particular, a device name can contain
++# quotes, backslashes, or control characters, and writing any of those raw into
++# a generated Lua file turns data into executable syntax.  Keep this encoder
++# alongside the live-apply path so both routes use Lua's actual escape grammar.
++hypr_lua_string() {
++  jq -nr --arg value "$1" '
++    def lua_string:
++      "\"" + (explode | map(
++        if . == 34 then "\\\""
++        elif . == 92 then "\\\\"
++        elif . < 32 or . == 127 then "\\" + ("000" + tostring)[-3:]
++        else [.] | implode
++        end
++      ) | join("")) + "\"";
++    $value | lua_string
++  '
++}
++
+ # Render the store into a generated Lua file (or a conf file on pre-Lua
+ # setups), and make sure the user's top-level config loads it.
+ render_managed() {
+@@ -225,10 +243,18 @@ render_managed_lua() {
+     echo "-- to hand that setting back to your own config."
+     echo ""
+     jq -r --argjson pairs "$pairs" '
++      def lua_string:
++        "\"" + (explode | map(
++          if . == 34 then "\\\""
++          elif . == 92 then "\\\\"
++          elif . < 32 or . == 127 then "\\" + ("000" + tostring)[-3:]
++          else [.] | implode
++          end
++        ) | join("")) + "\"";
+       def lua(v):
+         if v == true or v == false then (v | tostring)
+         elif (v | type) == "number" then (v | tostring)
+-        else "\"" + (v | tostring) + "\"" end;
++        else (v | tostring | lua_string) end;
+       def render(obj; indent):
+         [obj | to_entries[]
+           | if (.value | type) == "object"
+@@ -244,11 +270,23 @@ render_managed_lua() {
+     render_extras_lua
+ 
+     # Per-device overrides, one hl.device call each.
+-    jq -r '(.devices // {}) | to_entries[]
+-      | "hl.device({\n  name = \"" + .key + "\","
++    jq -r '
++      def lua_string:
++        "\"" + (explode | map(
++          if . == 34 then "\\\""
++          elif . == 92 then "\\\\"
++          elif . < 32 or . == 127 then "\\" + ("000" + tostring)[-3:]
++          else [.] | implode
++          end
++        ) | join("")) + "\"";
++      def lua(v):
++        if v == true or v == false then (v | tostring)
++        elif (v | type) == "number" then (v | tostring)
++        else (v | tostring | lua_string) end;
++      (.devices // {}) | to_entries[]
++      | "hl.device({\n  name = " + lua(.key) + ","
+         + ([.value | to_entries[]
+-            | "\n  " + .key + " = "
+-              + (if (.value | type) == "string" then "\"" + .value + "\"" else (.value | tostring) end) + ","]
++            | "\n  [" + lua(.key) + "] = " + lua(.value) + ","]
+            | join(""))
+         + "\n})\n"' <<<"$store"
+   } | write_file "$MANAGED_LUA" managed
+@@ -295,7 +333,7 @@ hypr_apply_live() {
+ 
+   if [[ -f $HYPR_DIR/hyprland.lua ]]; then
+     local lua_value=$value
+-    [[ $type == str ]] && lua_value=$(jq -Rn --arg v "$value" '$v')
++    [[ $type == str ]] && lua_value=$(hypr_lua_string "$value")
+     hyprctl eval "hl.config($(hypr_lua_table "$keyword" "$lua_value"))" >/dev/null 2>&1
+     return
+   fi

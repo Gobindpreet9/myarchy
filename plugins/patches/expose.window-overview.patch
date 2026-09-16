@@ -1,0 +1,16 @@
+diff --git c/Overview.qml w/Overview.qml
+index 2462f15..fefd3d0 100644
+--- c/Overview.qml
++++ w/Overview.qml
+@@ -112,7 +112,10 @@ Item {
+         var value = raw === null || raw === undefined ? NaN : Number(raw);
+         return isFinite(value) ? Math.max(0, Math.min(90, Math.round(value))) : 6;
+     }
+-    readonly property bool hotCornerEnabled: !root.pluginEntry || root.pluginEntry.hotCornerEnabled !== false
++    // Third-party plugins receive a capability-scoped shell API, which may not
++    // expose shellConfig. Treat an unavailable entry as opt-in rather than
++    // silently enabling a screen-edge trigger.
++    readonly property bool hotCornerEnabled: root.pluginEntry && root.pluginEntry.hotCornerEnabled === true
+     readonly property var hotCornerPositions: ["top-left", "top-right", "bottom-left", "bottom-right"]
+     readonly property string hotCornerPosition: {
+         var position = String((root.pluginEntry && root.pluginEntry.hotCornerPosition) || "top-left");
