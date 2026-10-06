@@ -424,20 +424,35 @@ Item {
     }
 
     function submitAi() {
-        if (!root.service) return
+        if (!root.service) return "no-service"
         var prompt = AiState.prompt(root.query)
-        if (root.service.busy) {
+        if (root.service.busy || root.service.stopping) {
             root.feedbackText = "Wait for the answer, or press Stop."
             feedbackTimer.restart()
+            return "busy"
         } else if (root.service.loadingLatest) {
             root.feedbackText = "Loading your last conversation…"
             feedbackTimer.restart()
+            return "loading"
+        } else if (root.service.attachmentBlocked) {
+            // IPC-only copy: the composer's Enter/Send are pre-gated by
+            // canSubmit, so in the live UI the preview chrome itself is the
+            // explanation; these strings reach the user only through the
+            // test-only submit/submitfile hooks below.
+            root.feedbackText = root.service.previewStatus === "error"
+                ? "CSV preview failed. Retry or remove the attachment."
+                : "Review the CSV preview before sending."
+            feedbackTimer.restart()
+            return root.service.previewStatus === "error" ? "attachment-error" : "previewing"
         } else if (prompt.length > 8000) {
             root.feedbackText = "Keep your question under 8,000 characters."
             feedbackTimer.restart()
+            return "rejected"
         } else if (root.service.submit(prompt)) {
             root.query = AiState.prefix
+            return "submitted"
         }
+        return "rejected"
     }
 
     function open(payloadJson) {
@@ -637,23 +652,20 @@ Item {
         }
         function submit(text: string): string {
             // Test-only: drive the exact submit path without keyboard input.
-            root.query = AiState.prefix + String(text || "")
-            Qt.callLater(function() { root.submitAi() })
-            return "ok"
-        }
-        function submitfile(text: string, path: string): string {
-            // Test-only: attach a real file (same intent as the Ask-AI row)
-            // and drive the exact submit path.
             if (!root.service) return "no-service"
             if (root.service.busy || root.service.stopping) return "busy"
             if (root.service.loadingLatest) return "loading"
-            var prompt = String(text || "").trim()
-            if (!prompt || prompt.length > 8000 || !String(path || "")) return "rejected"
-            if (!AiState.supported(root.service.agent) && !AiState.supported(root.service.defaultAgent)) return "rejected"
-            root.service.attachment = String(path || "")
-            root.query = AiState.prefix + prompt
-            root.submitAi()
-            return root.service.busy ? "ok" : "rejected"
+            if (root.service.attachmentBlocked)
+                return root.service.previewStatus === "error" ? "attachment-error" : "previewing"
+            root.query = AiState.prefix + String(text || "")
+            return root.submitAi()
+        }
+        function submitfile(text: string, path: string): string {
+            // Test-only: attach a real file (same intent as the Ask-AI row)
+            // CSV attachment starts a local preview; sending is a later,
+            // explicit action. A ready CURRENT attachment may be sent directly.
+            return AiState.submitFile(root.service, text, path,
+                function(query) { root.query = query }, function() { return root.submitAi() })
         }
         function depth(mode: string): string {
             // Test-only: trigger the adaptive-depth action directly.
@@ -699,6 +711,14 @@ Item {
                 aiMode: root.aiMode,
                 aiBusy: root.service ? root.service.busy : false,
                 aiLoading: root.service ? root.service.loadingLatest : false,
+                previewStatus: root.service ? root.service.previewStatus : "idle",
+                previewRows: root.service && root.service.previewData ? root.service.previewData.previewRows : 0,
+                columnCount: root.service && root.service.previewData ? root.service.previewData.columnCount : 0,
+                totalRows: root.service && root.service.previewData ? root.service.previewData.totalRows : null,
+                truncated: root.service && root.service.previewData ? root.service.previewData.truncated : false,
+                columnsTruncated: root.service && root.service.previewData ? root.service.previewData.columnsTruncated : false,
+                cellsTruncated: root.service && root.service.previewData ? root.service.previewData.cellsTruncated : false,
+                previewError: root.service ? root.service.previewError : "",
                 brokerIdle: root.service ? root.service.brokerIdleCheck() : false,
                 brokerRunning: root.service ? root.service.brokerLive : false,
                 aiTurns: root.service ? root.service.turns.length : 0,
@@ -1139,6 +1159,8 @@ Item {
                         busy: root.service && root.service.busy
                         stopping: root.service && root.service.stopping
                         loading: root.service && root.service.loadingLatest
+                        attachmentBlocked: !!root.service && typeof root.service.attachmentBlocked !== "undefined"
+                            && root.service.attachmentBlocked
                         hasConversation: root.service && root.service.turns.length > 0
                         foreground: root.foreground
                         background: root.background

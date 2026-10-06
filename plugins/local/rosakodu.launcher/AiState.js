@@ -47,6 +47,25 @@ function answerTitle(turn) {
     return text ? text[0].toUpperCase() + text.slice(1) : "Answer";
 }
 function supported(agent) { return agent === "codex" || agent === "hermes"; }
+// Test-only submitfile IPC uses this same guarded path. Callbacks belong to the
+// launcher host, never model input; attachment validation remains reader-owned.
+function submitFile(service, text, path, applyQuery, submitCurrent) {
+    if (!service) return "no-service";
+    if (service.busy || service.stopping) return "busy";
+    if (service.loadingLatest) return "loading";
+    var question = String(text || "").trim();
+    if (!question || question.length > 8000 || !String(path || "")) return "rejected";
+    if (!supported(service.agent) && !supported(service.defaultAgent)) return "rejected";
+    var file = String(path || "");
+    // Capture permission BEFORE assignment/query callbacks: readiness gained
+    // during initial attachment must never turn review into an automatic send.
+    var readyCurrent = service.attachment === file && !service.attachmentBlocked;
+    service.attachment = file;
+    applyQuery(prefix + question);
+    if (/\.csv$/i.test(file) && !readyCurrent)
+        return service.previewStatus === "error" ? "attachment-error" : "previewing";
+    return submitCurrent();
+}
 function newTurn(prompt, attachment) {
     return {prompt: prompt, attachment: attachment || "", answer: "", blocks: [], suggestions: [],
             status: "working", error: "", warning: ""};

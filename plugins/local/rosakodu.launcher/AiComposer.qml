@@ -13,11 +13,12 @@ FocusScope {
     property bool busy: false
     property bool stopping: false
     property bool loading: false
+    property bool attachmentBlocked: false
     property bool hasConversation: false
     // The detached workspace window hides the back-to-apps affordance.
     property bool showBackButton: true
     readonly property bool activeInputFocus: promptInput.activeFocus
-    readonly property bool canSubmit: promptInput.text.trim().length > 0 && !busy && !stopping && !loading
+    readonly property bool canSubmit: promptInput.text.trim().length > 0 && !busy && !stopping && !loading && !attachmentBlocked
     // The multiline editor consumes Tab (indent) and must not trap focus:
     // Escape stays in the field's own handler, and buttons stay Tab-reachable.
     readonly property bool editorTabTrapped: false

@@ -4,6 +4,139 @@ import "../AiState.js" as AiState
 
 TestCase {
     name: "AiState"
+    function fileSubmitHarness(overrides) {
+        var service = Object.assign({busy: false, stopping: false, loadingLatest: false,
+            agent: "codex", defaultAgent: "hermes", draft: "Existing draft",
+            _attachment: "/fixtures/existing.csv", attachmentBlocked: true,
+            previewStatus: "loading", turnId: 17, turns: [{id: 17, prompt: "Existing turn"}]}, overrides || {})
+        Object.defineProperty(service, "attachment", {
+            enumerable: true,
+            get: function() { return service._attachment },
+            set: function(value) {
+                if (value === service._attachment) return
+                service._attachment = value
+                service.previewStatus = "idle"
+                service.attachmentBlocked = /\.csv$/i.test(value)
+            }
+        })
+        var harness = {service: service, query: "ai: Existing draft", queries: [], dispatches: [],
+            submitResult: "submitted", afterQuery: null, events: []}
+        harness.run = function(text, path) {
+            return AiState.submitFile(harness.service, text, path, function(query) {
+                harness.events.push("query")
+                harness.query = query
+                harness.queries.push(query)
+                harness.service.draft = AiState.draft(query)
+                if (harness.afterQuery) harness.afterQuery()
+            }, function() {
+                harness.events.push("submit")
+                harness.dispatches.push({attachment: harness.service.attachment,
+                    draft: harness.service.draft, query: harness.query})
+                return harness.submitResult
+            })
+        }
+        return harness
+    }
+    function test_submitFileGuardsBeforeAnyMutation_data() {
+        return [
+            {tag: "no-service", noService: true, status: "no-service"},
+            {tag: "busy", overrides: {busy: true}, status: "busy"},
+            {tag: "stopping", overrides: {stopping: true}, status: "busy"},
+            {tag: "busy-before-loading", overrides: {busy: true, loadingLatest: true}, status: "busy"},
+            {tag: "loading", overrides: {loadingLatest: true}, status: "loading"},
+            {tag: "empty", text: "", status: "rejected"},
+            {tag: "whitespace", text: " \n\t ", status: "rejected"},
+            {tag: "oversized", text: "x".repeat(8001), status: "rejected"},
+            {tag: "missing-path", path: "", status: "rejected"},
+            {tag: "null-path", path: null, status: "rejected"},
+            {tag: "undefined-path", missingPath: true, status: "rejected"},
+            {tag: "false-path", path: false, status: "rejected"},
+            {tag: "unsupported", overrides: {agent: "other", defaultAgent: "unknown"}, status: "rejected"}
+        ]
+    }
+    function test_submitFileGuardsBeforeAnyMutation(data) {
+        var harness = fileSubmitHarness(data.overrides)
+        var original = harness.service
+        if (data.noService) harness.service = null
+        var before = JSON.stringify(original)
+        var text = data.text !== undefined ? data.text : "Review rows"
+        var path = data.missingPath ? undefined : data.path !== undefined ? data.path : "/fixtures/rents.csv"
+        compare(harness.run(text, path), data.status)
+        compare(JSON.stringify(original), before, "Rejected IPC must preserve draft, attachment, turn and readiness")
+        compare(harness.query, "ai: Existing draft")
+        compare(harness.queries.length, 0, "No query callback before guards succeed")
+        compare(harness.dispatches.length, 0, "No submission callback before guards succeed")
+        compare(harness.events.length, 0)
+    }
+    function test_submitFileInitialCsvNeverAutoSendsEvenIfQueryReadiesIt() {
+        var harness = fileSubmitHarness()
+        harness.afterQuery = function() {
+            harness.service.previewStatus = "ready"
+            harness.service.attachmentBlocked = false
+        }
+        compare(harness.run("  Review rows\n", "/fixtures/rents.CSV"), "previewing")
+        compare(harness.service.attachment, "/fixtures/rents.CSV")
+        compare(harness.query, AiState.prefix + "Review rows")
+        compare(harness.service.draft, "Review rows")
+        compare(harness.queries.length, 1)
+        compare(harness.dispatches.length, 0, "Initial attachment is review-only despite synchronous readiness")
+        compare(harness.service.turnId, 17)
+        compare(harness.service.turns.length, 1)
+        compare(harness.run("Explicit send", "/fixtures/rents.CSV"), "submitted")
+        compare(harness.dispatches.length, 1, "Later same-path ready request explicitly dispatches exactly once")
+        compare(harness.dispatches[0], {attachment: "/fixtures/rents.CSV",
+            draft: "Explicit send", query: AiState.prefix + "Explicit send"})
+        compare(harness.events, ["query", "query", "submit"])
+    }
+    function test_submitFileChangedPathCannotReuseReadiness() {
+        var harness = fileSubmitHarness({previewStatus: "ready", attachmentBlocked: false})
+        compare(harness.run("Review replacement", "/fixtures/replacement.csv"), "previewing")
+        compare(harness.service.previewStatus, "idle")
+        compare(harness.service.attachmentBlocked, true)
+        compare(harness.dispatches.length, 0)
+        compare(harness.run("Still unread", "/fixtures/replacement.csv"), "previewing")
+        compare(harness.dispatches.length, 0, "Repeated unread attachment remains review-only")
+        harness.service.previewStatus = "ready"
+        harness.service.attachmentBlocked = false
+        compare(harness.run("Reviewed replacement", "/fixtures/replacement.csv"), "submitted")
+        compare(harness.dispatches.length, 1)
+    }
+    function test_submitFileErrorRequiresSuccessfulRetry() {
+        var harness = fileSubmitHarness({previewStatus: "error", attachmentBlocked: true})
+        compare(harness.run("Review error", "/fixtures/existing.csv"), "attachment-error")
+        compare(harness.run("Explicit attempt", "/fixtures/existing.csv"), "attachment-error")
+        compare(harness.dispatches.length, 0)
+        harness.service.previewStatus = "loading"
+        compare(harness.run("Retry is reading", "/fixtures/existing.csv"), "previewing")
+        harness.service.previewStatus = "ready"
+        harness.service.attachmentBlocked = false
+        compare(harness.dispatches.length, 0, "Retry readiness itself does not dispatch")
+        compare(harness.run("Ready explicit send", "/fixtures/existing.csv"), "submitted")
+        compare(harness.dispatches.length, 1)
+    }
+    function test_submitFileNonCsvStaysSynchronousAndReturnsHostStatus_data() {
+        return [{tag: "submitted", status: "submitted"}, {tag: "loading", status: "loading"},
+            {tag: "busy", status: "busy"}, {tag: "rejected", status: "rejected"}]
+    }
+    function test_submitFileNonCsvStaysSynchronousAndReturnsHostStatus(data) {
+        var harness = fileSubmitHarness({agent: "unsupported", defaultAgent: "hermes"})
+        harness.submitResult = data.status
+        var question = "x".repeat(8000)
+        compare(harness.run(" " + question + " ", "/fixtures/notes.txt"), data.status)
+        compare(harness.dispatches.length, 1, "Non-CSV invokes the host synchronously")
+        compare(harness.events, ["query", "submit"])
+        compare(harness.dispatches[0].attachment, "/fixtures/notes.txt")
+        compare(harness.dispatches[0].draft, question, "The 8000-character bound applies after trimming")
+    }
+    function test_submitFileDoesNotAddPathRestrictions() {
+        var harness = fileSubmitHarness()
+        var path = "/outside/workspace/literal;file.csv"
+        compare(harness.run("Review", path), "previewing")
+        compare(harness.service.attachment, path, "Home/regular-file validation stays in the existing secure reader")
+        compare(harness.dispatches.length, 0)
+        compare(harness.run("Whitespace path keeps prior semantics", " "), "submitted")
+        compare(harness.dispatches[0].attachment, " ", "Only missing/empty paths are rejected by this IPC guard")
+    }
     function test_sourcesUseExplicitSafeBrowserArguments() {
         var url = "https://example.com/article?q=hello%20world&x=1"
         compare(AiState.sourceCommand(url), ["omarchy-launch-browser", url]);

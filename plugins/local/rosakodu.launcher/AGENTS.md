@@ -8,6 +8,16 @@ from a pre-update SQLite backup (no existing records overwritten), and 1.21.3
 preserves all 67 on subsequent AI entry. This is why load housekeeping and
 user-requested destructive retention must stay separate.
 
+Checkpoint 1.22.0 (2026-10-06, offscreen): local CSV preview + detached
+measured minimum delivered and reviewed. Green: **195 Python (2 skipped)**,
+**158 main QtTests**, 15 blocks / 23 visual / 12 answer, isolated
+`AiServiceCheck` / `AiAttachmentPreviewCheck` / `AiPreviewServiceCheck` /
+`AiDetachedWindowCheck` in scratch HOMEs, audit and scratch restore (manifest
+hashes recomputed, 9 preview files added to the allowlist). The full-preview
+detached floor is pinned in a 660–680 band (measured 669px at width 720).
+Live Wayland/mixed-DPR qualification and the live attach → ready → gated-send
+pass remain pending and must be recorded separately.
+
 Reviewed checkpoint 1.21.2: all workspace loads gate submission and retire warm
 broker sessions; timeout responses are invalidated, cleared drafts survive,
 and epoch timestamps use `real`. Hydration trims legacy accumulated transcripts
@@ -222,14 +232,66 @@ malformed and oversized fields must return readable turn errors, leaving the
 worker usable. `ai_catalog` forbids whole-file aggregates from prefix samples
 and exact calculations/identifiers from clipped values. Regression coverage in
 `tests/test_ai_broker.py` pins these boundaries and snapshot accounting once.
-Do not describe this as a local preview, type-correction UI, full resource copy
-or paged data explorer.
+Do not describe this provider snapshot as the complete source, a type-correction
+UI, a full resource copy or a paged data explorer — and do not use that wording
+to deny the launcher's local CSV preview (`AiAttachmentPreview` /
+`AiCsvPreview`), which is a separate bounded review surface with the same
+no-full-import honesty.
 
-Test-only `submitfile 'prompt' 'path'` (`LauncherPanel.qml`) guards
-busy/stopping, loading and invalid requests BEFORE draft/attachment mutation,
-then uses the same `submitAi()` synchronously. It does not grant the model a
-file tool; the normal attachment flow stays `f:` Ask AI / Ctrl+Enter, with
-review before sending.
+Local CSV preview (1.22.0): a bounded, credential-free review surface, never
+an import. `ai_attachment_preview.py` is the one-shot worker (8 KiB request /
+32 KiB response, explicit `.csv` only, fixed shell-free argv, credential-free
+environment limited to HOME/LC_CTYPE/PATH/PYTHONDONTWRITEBYTECODE/XDG_STATE_HOME)
+and reuses `attachment_snapshot` for at most 10 display rows × 20 columns × 80
+codepoints. `AiAttachmentPreview.qml` owns the retained lifecycle —
+path/token/generation invalidation, terminal-response protection,
+restore/workspace/new-chat switches invalidate readiness even for the same
+path, hidden surfaces defer work — and validates count/truncation parity plus
+strict-UTF-8 cells (lone surrogates are rejected). Its `note.length <= 300` is
+a validator-side bound set above the producer's measured worst case (254
+chars) and pinned against it by
+`test_note_bound_holds_when_every_disclosure_combines`: the sampler itself has
+NO runtime note bound, so that differential test — not a shared constant — is
+what keeps the validator above every reachable note while still small enough
+that a worst-case note cannot outgrow the peek-card budget, which has no
+`clip`. `AiCsvPreview.qml` renders bounded
+delegates, honest `sampleRows`/nullable `totalRows` disclosures, a
+keyboard-scrolled grid with a focus ring, and scrollbar tracks that hide when
+content fits; its loading/count/footer/disclosure text uses alpha `0.80`
+(>= 4.5:1 on the opaque Crimson Gold surface — translucent surfaces are NOT
+qualified). Submission stays gated at four independent points
+(`AiService.submit`, the composer's `canSubmit`, the panel's `submit`/
+`submitfile`, `AiState.submitFile`); readiness is captured before the
+attachment assignment, so even a synchronously ready first attach needs a
+second explicit send. The status IPC exposes preview metadata and the static
+error only — never CSV contents or the attachment path. The preview strings
+"Review the CSV preview before sending." / "CSV preview failed. …" are
+IPC-feedback only: the composer's Enter/Send are pre-gated by `canSubmit`.
+Offscreen checks: `AiAttachmentPreviewCheck.qml` (reader lifecycle, same-path
+retry bursts, destruction), `AiPreviewServiceCheck.qml` (host gates through the
+bundled stub broker) and `AiDetachedWindowCheck.qml` (the real
+`WorkspaceWindow` grows its measured minimum so disclosures stay inside a
+720px-wide window; both that check and the Quickshell-free replica in
+`tst_AiWorkspace.qml` pin the full-preview floor in a 660–680 band around the
+measured 669px — Quickshell only loads inside the quickshell binary, which is
+why the main suite uses a replica). Known peek-card limits: the card has no
+`clip`, so the row BELOW the disclosure (toolbar/actions) can hang over the
+card's 720px-capped bottom at narrow widths or with busy/restoring chrome —
+pre-existing shape, disclosure itself never clips — and the tightest measured
+disclosure fit is 718/720 at 420px width with restore+busy+preview+10-line
+draft, so any future chrome growth or note-bound increase clips there first.
+Offscreen
+suites cannot qualify the live Wayland scene graph — a live attach → ready →
+gated send pass is still required.
+
+Test-only `submitfile 'prompt' 'path'` (`LauncherPanel.qml`, delegated to the
+shared `AiState.submitFile`) guards busy/stopping, loading and invalid requests
+BEFORE draft/attachment mutation. A newly attached CSV returns `previewing`
+(or `attachment-error`) and never dispatches: the current attachment must be
+ready before a second explicit submit calls the same `submitAi()`; a ready
+current attachment or a non-CSV file still submits synchronously. It does not
+grant the model a file tool; the normal attachment flow stays `f:` Ask AI /
+Ctrl+Enter, with review before sending.
 
 Conversation rows are Loader-gated: `AiPane.qml` instantiates one row per turn
 through a `Loader` that is `active` only for the newest turn or while earlier

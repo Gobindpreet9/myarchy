@@ -11,6 +11,42 @@ retained all 67 pre-update workspace IDs. Store and service regressions pin
 this contract. Explicit manual store pruning retains its old behavior; no
 automatic history-retention policy is implied by earlier housekeeping notes.
 
+Checkpoint 1.22.0 (2026-10-06, offscreen): local CSV preview + detached
+measured minimum delivered and reviewed (UX/MUST findings M1, S1-S5 and
+closure findings S-1..S-8 folded in). Green: **195 Python tests (2 skipped)**
+(including 22 `test_ai_attachment_preview`), **158 main QtTests** (including
+the 18-case `AiCsvPreview` suite and the `AiWorkspace` probe replica), 15
+blocks / 23 visual / 12 answer, isolated `AiServiceCheck`,
+`AiAttachmentPreviewCheck`, `AiPreviewServiceCheck` and
+`AiDetachedWindowCheck` in dedicated scratch HOMEs, `qmllint` without errors
+on changed files, audit, and scratch restore with recomputed manifest hashes.
+The full-preview detached floor is pinned in a 660–680 band (measured 669 at
+width 720). This is NOT a live Wayland qualification: mixed-DPR, a second
+display scale and the live attach → ready → gated-send pass are still pending
+and must be recorded separately.
+
+Native local CSV preview delivered (2026-10-06, **1.22.0**): attaching an
+explicit `.csv` opens a bounded, credential-free review surface before any
+provider work — a one-shot worker (`ai_attachment_preview.py`, 8/32 KiB
+envelopes, fixed argv, cleared environment) feeds a retained reader
+(`AiAttachmentPreview.qml`) and a native grid (`AiCsvPreview.qml`) showing at
+most 10 rows × 20 columns × 80 codepoints with counts, sampler note and
+truncation disclosures. Submission is gated at four points until the *current*
+attachment is ready; a newly attached CSV returns `previewing` from
+`submitfile` and never auto-sends, and restore/workspace/new-chat transitions
+invalidate readiness even for an unchanged path. The status IPC exposes
+metadata and the static error only. The validator's 300-char note bound sits
+above the producer's measured worst case (254 chars) and is pinned against it
+by differential tests, so disclosures cannot outgrow the unclipped peek
+card, and disclosure text uses alpha 0.80 for >= 4.5:1 on the opaque surface.
+The detached `WorkspaceWindow` no longer keeps a fixed 720×560 floor: its
+measured minimum follows title + composer + pane chrome + a 160px conversation
+reserve (669px with the full preview at 720 width, pinned in a 660–680 band by
+both the replica and the real-window check), and a visible window grows
+instead of clipping disclosures. This ships WITHOUT paging, type correction,
+full-import claims or live Wayland/mixed-DPR qualification; a live attach →
+ready → gated send pass remains to be recorded.
+
 Reviewed checkpoint (2026-10-06, manifest **1.21.2**): the local source is
 represented by the explicit repository restore allowlist. Review corrections
 align saves with the 20-turn cap, distinguish authoritative full content from
@@ -62,7 +98,7 @@ provider. Earlier service-check isolation claims relied on ineffective readonly
 overrides and are superseded by this fix. Documentation and test fixtures are
 identity-neutral; runtime state and credentials stay outside repository commits.
 
-Status: **Phase 3 underway with scoped foundations** (2026-10-05, manifest **1.21.0**): persisted native table sorting/filtering and bounded provider CSV attachment sampling are delivered. This is not native CSV preview/type correction, a full resource copy or a paged data explorer. Paging/UI, source persistence, type corrections, scenario controls and the typed expression runtime (including units/cycles) remain pending; neither the Phase 3 exit nor the full 100k-row dataset gate is claimed. Phase 2 evidence and all measurement limits remain below, including second display scale, instrumented CPU/wakeup attribution, decoded-pixel profiling at DPR and programmable-artifact budgets. The new isolated 100k-row **sampler-only** check does not close the full dataset gate.
+Status: **Phase 3 underway with scoped foundations** (2026-10-05, manifest **1.21.0**): persisted native table sorting/filtering and bounded provider CSV attachment sampling are delivered. The provider sampling itself is not a type-correction UI, a full resource copy or a paged data explorer; the launcher's separate local native CSV preview is now delivered (see the 1.22.0 entry at the top) and makes no full-import claim either. Paging/UI, source persistence, type corrections, scenario controls and the typed expression runtime (including units/cycles) remain pending; neither the Phase 3 exit nor the full 100k-row dataset gate is claimed. Phase 2 evidence and all measurement limits remain below, including second display scale, instrumented CPU/wakeup attribution, decoded-pixel profiling at DPR and programmable-artifact budgets. The new isolated 100k-row **sampler-only** check does not close the full dataset gate.
 
 Prior delivery: Phase 1 delivered `ai:` entry, Ask AI discovery, the multiline composer, the versioned workspace store with restart restoration, artifacts/revisions, saved-workspace search, the Peek/Explore cards, and the detached window. Phase 2 added the learning-loop vocabulary (steps/check/predict), the native diagram scene, bounded local computation (slider + formula readouts), slider-to-diagram coupling, and multi-image exploration (gallery blocks, up-to-three image candidates with local Show-another, an enlarged viewer). Gallery output has live verification; the actual enlarged viewer is now live-verified after geometry refinement. Plain-image Show another has unit coverage only, with no recorded live verification. Medium selection is now automatic and subject-driven: the plain question "Help me recognise Gothic, Romanesque and Renaissance architecture" produced a resolved three-item gallery with no format hints, and the seasons question produced a coupled diagram+slider. Contextual model suggestions render as composer-filling chips. Adaptive explanation depth landed (manifest 1.17.0, extended in 1.17.1/1.17.2): the latest answer with a learning block offers **Simpler** / **More depth** / **Another example** prose sidecars that leave the blocks and their state untouched, and a stale resumed provider session — depth explains included — now falls back to a fresh session once instead of hard-failing follow-ups. Seasons flagship acceptance run (manifest 1.17.3): through the real entry flow, the seasons question produced a 7-part orbit diagram plus a month slider with two diagram links and an honest note; **Simpler** persisted a prose sidecar on the same turn; the transfer follow-up ("If it is summer in Australia right now, roughly what month is it, and why?") answered correctly from the tilt concept (October is not Australian summer; it runs roughly December–February when the Southern Hemisphere tilts toward the Sun); and a full shell restart restored the two-turn conversation with its workspace, blocks and explanation intact. That run exposed and fixed a real save-gating bug: after **New chat**, `restoreSettled` stayed false and suppressed every autosave until close (`AiServiceCheck` now asserts a fresh conversation is immediately persistable). Phase 2 exit evidence was recorded under manifest 1.19.3 with the limits below; refinement and outstanding measurements remain.
 
@@ -78,9 +114,12 @@ Phase 2 budget verdicts against §4.8, from the recorded measurements and direct
 
 Phase 3 opener — comparison table as a local tool (manifest 1.20.0): the `table` block is no longer static. Column headers are buttons that cycle ascending → descending → authored order, sorting numbers numerically and text lexically; a filter field appears for tables of four or more rows and narrows rows by literal case-insensitive substring (never a pattern), with a live "n of m rows" count while filtering. Both the arrangement and the filter live in the turn's persisted interaction state (`table:<blockIndex>` = `{sort, dir, filter}`), so reopening a workspace restores the user's arrangement, and the exploration trail gained **Sorted** and **Filtered** entries. Verification: `AiBlocksCheck.test_tableSortsAndFiltersLocally` (header click emits one scoped state edit, applies numeric-aware ordering, cycles all three states, filters to "1 of 4 rows", and proves the filter is literal); trail unit tests for the two new entries; live run — a fresh comparison answer's header was reached by Tab, Return cycled to descending, the state persisted (`{"88":{"table:0":{"dir":-1,"filter":"","sort":0}}}`) and survived a full shell restart restore. This starts Phase 3's "comparison tool works with user changes, accurate local computations, persistence" deliverable; CSV import and scenario controls remain.
 
-Phase 3 CSV sampling foundation (2026-10-05, manifest **1.21.0**): explicit home-contained/no-follow regular-file attachments with case-insensitive `.csv` read the first 8 MiB. Strict comma `csv.reader` parsing accepts UTF-8 with optional BOM, preserves whitespace, and reports understandable turn errors for ragged/malformed rows or oversized fields without killing the worker. The unchanged non-CSV 64 KiB guard also rejects growth after stat. A read-window boundary withholds an incomplete UTF-8 codepoint and discards an incomplete logical CSV record, including multiline quoting. The provider snapshot keeps at most 200 prefix data rows, 20 columns and 80 characters per header/cell, bounded to 24,000 complete serialized UTF-8 JSON bytes, including metadata, quotes and escapes. `columnsTruncated` and `cellsTruncated` disclose loss separately and contribute to overall `truncated`; exact `totalRows` requires a fully read source, otherwise null. `ai_catalog` requires sample-only claims and forbids whole-file aggregates or exact calculations/identifiers from clipped values. This is an import/sampling foundation for provider context, **not** local native CSV preview, type correction, full resource copy or paged exploration.
+Phase 3 CSV sampling foundation (2026-10-05, manifest **1.21.0**): explicit home-contained/no-follow regular-file attachments with case-insensitive `.csv` read the first 8 MiB. Strict comma `csv.reader` parsing accepts UTF-8 with optional BOM, preserves whitespace, and reports understandable turn errors for ragged/malformed rows or oversized fields without killing the worker. The unchanged non-CSV 64 KiB guard also rejects growth after stat. A read-window boundary withholds an incomplete UTF-8 codepoint and discards an incomplete logical CSV record, including multiline quoting. The provider snapshot keeps at most 200 prefix data rows, 20 columns and 80 characters per header/cell, bounded to 24,000 complete serialized UTF-8 JSON bytes, including metadata, quotes and escapes. `columnsTruncated` and `cellsTruncated` disclose loss separately and contribute to overall `truncated`; exact `totalRows` requires a fully read source, otherwise null. `ai_catalog` requires sample-only claims and forbids whole-file aggregates or exact calculations/identifiers from clipped values. This is an import/sampling foundation for provider context, **not** the
+complete source, a type-correction UI, a full resource copy or paged
+exploration; the local native CSV preview is a separate surface delivered in
+1.22.0.
 
-The test-only `submitfile 'prompt' 'path'` IPC rejects busy/stopping, loading and invalid requests before draft/attachment mutation, then calls the same `submitAi()` synchronously. It grants no model file tool; users still attach via `f:` Ask AI / Ctrl+Enter and review before sending. The table filter ring now uses `activeFocus` (`visualFocus` is not a `TextField` member), and `tableState` avoids shadowing `QQuickItem.state`. `tests/AiBlocksCheck.qml` now exercises actual keyboard filter editing, its state emission and focus ring. `tests/test_ai_broker.py` pins serialized UTF-8/escape bounds, prefix retention, separate clipping disclosure, whitespace, BOM/multiline parsing, ragged/malformed errors, read-window records/codepoints, and worker recovery after malformed/oversized fields with one-time snapshot accounting.
+The test-only `submitfile 'prompt' 'path'` IPC rejects busy/stopping, loading and invalid requests before draft/attachment mutation; a newly attached CSV returns `previewing` (or `attachment-error`) without dispatching and needs a second explicit submit once the current preview is ready, while a ready current attachment or a non-CSV file calls the same `submitAi()` synchronously. It grants no model file tool; users still attach via `f:` Ask AI / Ctrl+Enter and review before sending. The table filter ring now uses `activeFocus` (`visualFocus` is not a `TextField` member), and `tableState` avoids shadowing `QQuickItem.state`. `tests/AiBlocksCheck.qml` now exercises actual keyboard filter editing, its state emission and focus ring. `tests/test_ai_broker.py` pins serialized UTF-8/escape bounds, prefix retention, separate clipping disclosure, whitespace, BOM/multiline parsing, ragged/malformed errors, read-window records/codepoints, and worker recovery after malformed/oversized fields with one-time snapshot accounting.
 
 Verification (2026-10-05, manifest **1.21.0**): 107 main QtTests, 15 blocks, 23 visual and 11 answer checks; 161 Python tests (2 skipped with normal offline-audit flags unset); isolated `AiServiceCheck` and `AiWorkspaceStoreCheck` passed with scratch state. No test failures. Lint reported no errors but existing standalone `qs.Commons` resolution, Quickshell, old state-override, unqualified-access and `MoveAnchor` warnings remain; do not read earlier historical lint wording as a current warning-free claim. Existing Python database/test-pipe `ResourceWarning`s remain.
 
@@ -848,10 +887,11 @@ Exit: both flagship experiences satisfy their interaction, factual, keyboard, vi
 
 ### Phase 3 — Declarative mini-apps and data
 
-Current slice (1.21.0): native table sorting/filtering and saved arrangement,
+Current slice (1.21.0; the local native CSV preview landed separately in
+**1.22.0**): native table sorting/filtering and saved arrangement,
 plus bounded CSV provider-context sampling, are delivered and live-verified
 with eight synthetic rows. The isolated 100k-row check measures sampling only,
-not the full dataset exit. Remaining: native CSV preview and type correction,
+not the full dataset exit. Remaining: type correction,
 durable source resources/paging, editable data/scenarios, typed computation
 (units/cycles), and the other deliverables below.
 

@@ -15,6 +15,21 @@ function paneVisible(aiMode, service) {
     return !!aiMode && !!service && (service.turns.length > 0 || !!service.attachment || !!service.loadingLatest);
 }
 
+function detachedMinimumHeight(titleHeight, composerHeightArg, chromeHeight, reserveHeight) {
+    // The detached window's 720x560 floor is a MINIMUM, not a fixed size:
+    // full CSV-preview disclosures plus a capped long draft can exceed 560px,
+    // and a clipped disclosure is unreachable. Track measured content instead.
+    var title = typeof titleHeight === "number" && isFinite(titleHeight) && titleHeight > 0
+        ? titleHeight : 0;
+    var composer = typeof composerHeightArg === "number" && composerHeightArg > 0
+        ? composerHeightArg : composerHeight;
+    var chrome = typeof chromeHeight === "number" && isFinite(chromeHeight) && chromeHeight > 0
+        ? chromeHeight : 0;
+    var reserve = typeof reserveHeight === "number" && isFinite(reserveHeight) && reserveHeight > 0
+        ? reserveHeight : 0;
+    return Math.max(560, Math.ceil(2 * 20 + 2 * 14 + title + composer + chrome + reserve));
+}
+
 function answerHeight(responseHeight, chromeHeight, composerHeight, maxHeight) {
     // Match the host's 20px inset, composer and 14px inter-section spacing.
     var composer = composerHeight > 0 ? composerHeight : 60;

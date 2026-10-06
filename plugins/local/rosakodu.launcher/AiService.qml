@@ -27,6 +27,19 @@ Item {
     property bool resumeOnOpen: false
     property string draft: ""
     property string attachment: ""
+    // Local preview belongs to the retained service, not either disposable view.
+    // Use an explicit object property: the reader's JSON `data` shadows Item.data.
+    readonly property AiAttachmentPreview attachmentPreview: AiAttachmentPreview {
+        path: service.attachment
+        activeSurface: service.panelActive || service.windowActive
+        restoring: service.loadingLatest
+    }
+    readonly property string previewStatus: attachmentPreview.status
+    readonly property var previewData: attachmentPreview.pathMatch ? attachmentPreview.data : null
+    readonly property string previewError: attachmentPreview.error
+    readonly property bool attachmentBlocked: attachmentPreview.blocked
+
+    function retryAttachmentPreview() { attachmentPreview.retry() }
     property int turnId: 0
     property var pending: null
     property bool brokerStarted: false
@@ -253,6 +266,10 @@ Item {
     }
 
     function applyWorkspaceSnapshot(result, carryState) {
+        // Even an unchanged attachment path is a new workspace-local read.
+        // The reader defers dispatch so a load's false flag cannot read the
+        // outgoing attachment before this synchronous apply has finished.
+        attachmentPreview.invalidate()
         var carry = carryState || {}
         var carryDraft = String(carry.draft || "")
         var carryAttachment = String(carry.attachment || "")
@@ -372,6 +389,7 @@ Item {
     onUiStatesChanged: { dirtyContent = true; queueSave() }
     onDraftChanged: { ++draftRevision; queueSave() }
     onAttachmentChanged: queueSave()
+    onWorkspaceIdChanged: attachmentPreview.invalidate()
     onAgentChanged: queueSave()
     onLoadingLatestChanged: {
         if (loadingLatest) loadWatchdog.start()
@@ -416,7 +434,7 @@ Item {
 
     function submit(prompt) {
         var text = String(prompt || "").trim()
-        if (!text || busy || stopping || loadingLatest) return false
+        if (!text || busy || stopping || loadingLatest || attachmentBlocked) return false
         if (text.length > 8000) return false
         var chosen = AiState.supported(agent) ? agent : defaultAgent
         if (AiState.supported(chosen)) agent = chosen
@@ -500,6 +518,7 @@ Item {
 
     function newConversation() {
         if (busy || stopping) return
+        attachmentPreview.invalidate()
         var wasLoading = loadingLatest
         pending = null
         startupTimer.stop()

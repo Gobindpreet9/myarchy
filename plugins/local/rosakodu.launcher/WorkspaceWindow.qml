@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import "AiState.js" as AiState
+import "AiLayout.js" as AiLayout
 import "SatinGlass.js" as Satin
 
 // The detached AI workspace: a normal desktop window sharing the retained
@@ -22,7 +23,19 @@ FloatingWindow {
     visible: false
     implicitWidth: 1080
     implicitHeight: 820
-    minimumSize: Qt.size(720, 560)
+    // The 720x560 floor follows measured content: full CSV-preview
+    // disclosures plus a capped long draft exceed a fixed 560px minimum and
+    // would otherwise be clipped beyond the window edge with no scroll path.
+    readonly property real contentMinimumHeight: AiLayout.detachedMinimumHeight(
+        titleText.implicitHeight, composer.implicitHeight, pane.chromeHeight,
+        pane.turnCount > 0 || (pane.service && pane.service.loadingLatest) ? 160 : 0)
+    minimumSize: Qt.size(720, contentMinimumHeight)
+
+    function ensureFits() {
+        // Grow a visible window when chrome appears; never shrink it here.
+        if (visible && height < contentMinimumHeight) height = contentMinimumHeight
+    }
+    onContentMinimumHeightChanged: ensureFits()
 
     readonly property string workspaceTitle: {
         var latest = workspace.service ? workspace.service.latest : null
@@ -36,7 +49,10 @@ FloatingWindow {
 
     onVisibleChanged: {
         if (workspace.service) workspace.service.windowActive = visible
-        if (visible) Qt.callLater(function() { composer.focusPrompt() })
+        if (visible) {
+            ensureFits()
+            Qt.callLater(function() { composer.focusPrompt() })
+        }
     }
 
     ColumnLayout {
@@ -45,6 +61,7 @@ FloatingWindow {
         spacing: 14
 
         Text {
+            id: titleText
             Layout.fillWidth: true
             text: workspace.workspaceTitle
             textFormat: Text.PlainText
@@ -65,6 +82,8 @@ FloatingWindow {
             busy: workspace.service ? workspace.service.busy : false
             stopping: workspace.service ? workspace.service.stopping : false
             loading: workspace.service ? workspace.service.loadingLatest : false
+            attachmentBlocked: !!workspace.service && typeof workspace.service.attachmentBlocked !== "undefined"
+                && workspace.service.attachmentBlocked
             hasConversation: workspace.service ? workspace.service.turns.length > 0 : false
             foreground: workspace.foreground
             background: workspace.background
@@ -75,6 +94,7 @@ FloatingWindow {
         }
 
         AiPane {
+            id: pane
             Layout.fillWidth: true
             Layout.fillHeight: true
             visible: workspace.service && (workspace.service.turns.length > 0 || !!workspace.service.attachment || workspace.service.loadingLatest)

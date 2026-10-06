@@ -29,6 +29,7 @@ ColumnLayout {
     readonly property real chromeHeight:
         (restoringRow.visible ? restoringRow.implicitHeight + spacing : 0)
         + (attachmentRow.visible ? Math.max(32, attachmentRow.implicitHeight) + spacing : 0)
+        + (csvPreviewLoader.visible ? csvPreviewLoader.implicitHeight + spacing : 0)
         + (activityRow.visible ? 24 + spacing : 0)
         + (actionsRow.visible ? actionsRow.implicitHeight + spacing : 0)
     signal fillPrompt(string text)
@@ -98,6 +99,30 @@ ColumnLayout {
             text: "Remove"
             foreground: pane.foreground; accent: pane.accent
             onClicked: pane.service.attachment = ""
+        }
+    }
+
+    Loader {
+        id: csvPreviewLoader
+        objectName: "aiCsvPreviewLoader"
+        // Older/mock services may not implement the preview contract.
+        active: !!pane.service && typeof pane.service.previewStatus !== "undefined"
+            && /\.csv$/i.test(String(pane.service.attachment || ""))
+        visible: active && pane.service.previewStatus !== "idle"
+        Layout.fillWidth: true
+        Layout.preferredHeight: visible ? implicitHeight : 0
+        sourceComponent: AiCsvPreview {
+            objectName: "aiCsvPreview"
+            foreground: pane.foreground
+            background: pane.background
+            accent: pane.accent
+            status: pane.service && typeof pane.service.previewStatus !== "undefined" ? pane.service.previewStatus : "idle"
+            preview: pane.service && typeof pane.service.previewData !== "undefined" ? pane.service.previewData : null
+            error: pane.service && typeof pane.service.previewError !== "undefined" ? pane.service.previewError : ""
+            onRetryRequested: {
+                if (pane.service && typeof pane.service.retryAttachmentPreview === "function")
+                    pane.service.retryAttachmentPreview()
+            }
         }
     }
 

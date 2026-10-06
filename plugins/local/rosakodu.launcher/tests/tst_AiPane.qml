@@ -16,6 +16,11 @@ TestCase {
         property string defaultAgent: "codex"
         property string activity: "Thinking…"
         property string attachment: ""
+        property string previewStatus: "idle"
+        property var previewData: null
+        property string previewError: ""
+        property int previewRetries: 0
+        function retryAttachmentPreview() { ++previewRetries }
         property string sessionId: ""
         property string stateRoot: "/tmp/opencode"
         property string lastSource: ""
@@ -73,7 +78,47 @@ TestCase {
         accent: "#9bb9e9"
     }
 
-    function cleanup() { service.turns = []; service.busy = false; service.attachment = ""; service.lastSource = ""; service.checklistStates = ({}); service.loadingLatest = false; service.latestRequested = false; service.stateRoot = "/tmp/opencode"; pane.showText = false }
+    function cleanup() { service.turns = []; service.busy = false; service.attachment = ""; service.lastSource = ""; service.checklistStates = ({}); service.loadingLatest = false; service.latestRequested = false; service.stateRoot = "/tmp/opencode"; service.previewStatus = "idle"; service.previewData = null; service.previewError = ""; service.previewRetries = 0; pane.showText = false }
+    function test_csvPreviewIsLazyMeasuredAndUsesServiceRetry() {
+        var loader = findChild(pane, "aiCsvPreviewLoader")
+        verify(!loader.active && loader.item === null)
+        service.attachment = "/fixtures/notes.txt"
+        wait(30)
+        var attachmentChrome = pane.chromeHeight
+        service.attachment = "/fixtures/rents.CSV"
+        service.previewStatus = "loading"
+        wait(30)
+        verify(loader.active && loader.visible && loader.item !== null)
+        compare(findChild(pane, "aiCsvPreviewLoading").visible, true)
+        compare(pane.chromeHeight, attachmentChrome + loader.implicitHeight + pane.spacing)
+        var loadingHeight = pane.chromeHeight
+        service.previewData = {columns: ["City", "Rent"], rows: [["Oslo", "1200"], ["Porto", "600"]],
+            previewRows: 2, sampleRows: 2, columnCount: 2, totalRows: 2,
+            truncated: false, columnsTruncated: false, cellsTruncated: false, note: ""}
+        service.previewStatus = "ready"
+        wait(30)
+        compare(findChild(pane, "aiCsvPreviewCell0").text, "Oslo")
+        compare(findChild(pane, "aiCsvPreviewCount").text, "2 of 2 rows · 2 of 2 columns")
+        verify(pane.chromeHeight > loadingHeight)
+        compare(pane.chromeHeight, attachmentChrome + loader.implicitHeight + pane.spacing)
+        verify(findChild(pane, "aiCsvPreviewFooter").text.indexOf("read again when you send") >= 0)
+        service.previewStatus = "error"
+        service.previewData = null
+        service.previewError = "CSV attachment is empty."
+        wait(30)
+        compare(findChild(pane, "aiCsvPreviewError").text, service.previewError)
+        verify(findChild(pane, "aiCsvPreviewCell0") === null)
+        var retry = findChild(pane, "aiCsvPreviewRetry")
+        mouseClick(retry, retry.width / 2, retry.height / 2)
+        compare(service.previewRetries, 1)
+        service.attachment = "/fixtures/notes.txt"
+        wait(30)
+        verify(!loader.active && loader.item === null)
+        compare(pane.chromeHeight, attachmentChrome)
+        service.attachment = ""
+        wait(30)
+        compare(pane.chromeHeight, 0)
+    }
     function test_restoringHintReflectsTheLoadState() {
         // While the lazy latest-workspace load is in flight the pane discloses
         // the restore instead of pretending the conversation is gone.

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "rosakodu.launcher",
   "name": "Launcher",
-  "version": "1.21.3",
+  "version": "1.22.0",
   "author": "rosakodu",
   "license": "MIT",
   "description": "Native app and file launcher with default-agent AI conversations and validated interactive answer cards.",

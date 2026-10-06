@@ -387,9 +387,27 @@ disclosed separately as `columnsTruncated` and `cellsTruncated`, and contribute
 to overall `truncated`. `totalRows` is exact only when the source was fully
 read; otherwise it is `null`. Model guidance forbids whole-file aggregates from
 a prefix sample and exact calculations or identifiers from clipped values.
-This is a provider import/sampling foundation, **not** a local native CSV
-preview, type-correction UI, full resource copy or paged data explorer. A
-provider-authored native table remains a bounded answer, not the source dataset.
+This is a provider import/sampling foundation. The provider snapshot is **not**
+the complete source, a type-correction UI, a full resource copy or a paged data
+explorer; the launcher's separate local CSV preview (below) is a bounded review
+surface that also never claims to hold the full dataset. A provider-authored
+native table remains a bounded answer, not the source dataset.
+
+Attaching a file whose name ends in `.csv` also starts a separate **local
+preview** for review before sending: the pane shows *Reading CSV…*, then a
+bounded grid of at most 10 rows × 20 columns (80 Unicode codepoints per cell)
+with literal cell text, the counts ("N of M rows · …"), the sampler note and
+the truncation disclosures — or a readable error with **Retry** and **Remove**.
+While the current CSV is reading or failed the attachment is gated, so Enter,
+**Send** and the test-only `submitfile` cannot dispatch; a newly attached CSV
+returns `previewing` and never sends by itself. The grid scrolls with the
+arrow/Page keys inside a focus ring, scrollbar tracks appear only when the
+content actually overflows, and the footer states that the source is read again
+when you send. Nothing is imported, typed or executed: no credentials reach the
+fixed-argv worker, the model gets no file tool, and the status IPC reports
+preview metadata only (`previewStatus`, `previewRows`, `columnCount`,
+`totalRows`, `truncated`, `columnsTruncated`, `cellsTruncated`,
+`previewError`) — never the CSV contents or the attachment path.
 
 Closing the card does not stop work. The retained service preserves the chat
 and checklist state across ordinary close/reopen and panel hot reload, and the
@@ -456,17 +474,20 @@ omarchy-shell rosakodu.launcher expand     # toggle the Explore card (returns th
 omarchy-shell rosakodu.launcher window     # open (or focus) the detached workspace window
 omarchy-shell rosakodu.launcher newchat    # start a fresh conversation (keeps the finished one)
 omarchy-shell rosakodu.launcher submit 'text' # test-only: drive the exact submit path without keyboard input
-omarchy-shell rosakodu.launcher submitfile 'prompt' "$HOME/sample.csv" # test-only: attach and submit through the same path
+omarchy-shell rosakodu.launcher submitfile 'prompt' "$HOME/sample.csv" # test-only: attach; a new CSV returns "previewing"
 omarchy-shell rosakodu.launcher depth 'simpler|deeper|example' # test-only: adaptive-depth action on the latest learning answer
 omarchy-shell rosakodu.launcher swap '0' '2' # test-only: cycle gallery item (block 0, item 2) through the in-cell Show another path
 ```
 
 These are development/verification hooks; everyday use is through the `Super`
 binding described above.
-`submitfile` rejects busy/stopping, loading and invalid requests before changing
-the draft or attachment, then calls the same `submitAi()` synchronously. It is
-not a model-granted file tool; users still attach via `f:` **Ask AI** /
-`Ctrl+Enter` and review before sending.
+`submitfile` (shared with `AiState.submitFile`) rejects busy/stopping, loading
+and invalid requests before changing the draft or attachment. Attaching a CSV
+returns `previewing` (or `attachment-error`) without sending anything: the local
+preview must reach `ready`, and a second explicit submit is required. A ready
+CURRENT attachment, or a non-CSV file, still calls the same `submitAi()`
+synchronously. It is not a model-granted file tool; users still attach via `f:`
+**Ask AI** / `Ctrl+Enter` and review before sending.
 
 ---
 
@@ -502,6 +523,13 @@ PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py'
 QT_QPA_PLATFORM=offscreen quickshell -p FileSearchProcessCheck.qml
 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software quickshell -p AiServiceCheck.qml
 XDG_STATE_HOME=/tmp/opencode/store-check QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software quickshell -p AiWorkspaceStoreCheck.qml
+# AiAttachmentPreviewCheck / AiPreviewServiceCheck need a dedicated
+# /tmp/opencode/ai-preview-check-* HOME with a nested XDG_STATE_HOME
+# (they refuse a real home directory); AiDetachedWindowCheck accepts any
+# /tmp/opencode/ scratch HOME:
+QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software quickshell -p AiAttachmentPreviewCheck.qml
+QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software quickshell -p AiPreviewServiceCheck.qml
+QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software quickshell -p AiDetachedWindowCheck.qml
 ```
 
 The main QtTest suite includes `AiComposer`, `AiPane`, `AiState` and integrated

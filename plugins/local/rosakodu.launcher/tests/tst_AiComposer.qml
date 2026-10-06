@@ -73,6 +73,8 @@ TestCase {
         tests.query = "ai: "
         composer.busy = false
         composer.stopping = false
+        composer.loading = false
+        composer.attachmentBlocked = false
         composer.hasConversation = false
         composer.showBackButton = true
         composer.width = 660
@@ -221,6 +223,29 @@ TestCase {
         compare(submitSpy.count, 1)
         compare(editSpy.count, 0)
         compare(input.text, "Question")
+    }
+    function test_attachmentGateBlocksSendWithoutPretendingAiIsBusy() {
+        tests.query = "ai: Review these rows"
+        composer.focusPrompt()
+        tryCompare(input, "cursorPosition", input.length)
+        composer.attachmentBlocked = true
+        verify(!composer.canSubmit && !send.visible && !send.enabled)
+        verify(!composer.busy && !composer.stopping && !stop.visible)
+        verify(input.enabled && !input.readOnly)
+        keyClick(Qt.Key_Return)
+        compare(submitSpy.count, 0)
+        typeText("!")
+        compare(input.text, "Review these rows!")
+        composer.attachmentBlocked = false
+        verify(composer.canSubmit && send.visible)
+        compare(submitSpy.count, 0, "Readiness never automatically sends")
+        composer.loading = true
+        verify(!composer.canSubmit)
+        keyClick(Qt.Key_Return)
+        compare(submitSpy.count, 0, "Restore remains a separate gate")
+        composer.loading = false
+        keyClick(Qt.Key_Return)
+        compare(submitSpy.count, 1)
     }
     function test_actionLifecycleReturnsFocusToEditableDraft_data() {
         return [{tag: "keyboard", keyboard: true}, {tag: "mouse", keyboard: false}]
