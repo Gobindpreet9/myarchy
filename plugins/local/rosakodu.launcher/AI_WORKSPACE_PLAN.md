@@ -47,6 +47,27 @@ instead of clipping disclosures. This ships WITHOUT paging, type correction,
 full-import claims or live Wayland/mixed-DPR qualification; a live attach →
 ready → gated send pass remains to be recorded.
 
+Live 1.22.0 attach → ready → gated-send pass recorded (2026-10-06): on the
+committed deployment (backups + DB snapshot first), a real `.csv` attach
+returned `previewing` and reached `ready` with 8 rows / 3 columns / total 8 and
+no truncation; the panel and the detached window render the literal grid with
+all disclosures inside the window bounds on the live scale-1.25 display. A
+ragged file produced the static error `CSV line 2 has 3 columns; the header has
+2.`, after which `submit` answered `attachment-error` with busy false, an
+unchanged turn count and an idle broker: the send stayed gated. A shell
+restart re-read the retained attachment to `ready` and kept the conversation
+and all 67 user workspaces; the shell log is free of launcher errors. Held
+outside the pass: mixed-DPR and a second display scale, a successful live
+provider send (deliberately not attempted), the omarchy-owned `shell`/
+`appLibrary` flag timing (fallback desktop scan works), a `hyprctl`
+tiled-rect vs floating-center geometry mismatch (content fit verified
+visually), and the codex/hermes-only `supported()` gate that requires
+`~/.config/omarchy/defaults/agent` to name a supported agent for the attach
+path to open (restored to `claude` after the test). One real dispatch happened
+by design during testing (second `submitfile` on an already-ready attachment);
+it was confined to test conversation `ws-62943ec34e1535ba` and failed codex
+authentication without touching the 67 user workspaces.
+
 Reviewed checkpoint (2026-10-06, manifest **1.21.2**): the local source is
 represented by the explicit repository restore allowlist. Review corrections
 align saves with the 20-turn cap, distinguish authoritative full content from

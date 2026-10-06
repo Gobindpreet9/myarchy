@@ -144,13 +144,13 @@
       "path": "plugins/local/rosakodu.launcher/AGENTS.md",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/AGENTS.md",
       "mode": "0644",
-      "sha256": "a33f701cf9cff90d47ed33d563e6933ae842d04c3fa0eb536824e1fac31573f9"
+      "sha256": "883afaac7e20532cd35006161f7c7934ed1d6e1e1365d8dd12212b53149aa08b"
     },
     {
       "path": "plugins/local/rosakodu.launcher/AI_WORKSPACE_PLAN.md",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/AI_WORKSPACE_PLAN.md",
       "mode": "0644",
-      "sha256": "a0ac8172f7f99d2b5eb22f53bcf8565b6bbb122b49a309da293374f72d412c58"
+      "sha256": "7fd9b104870e12d7bee5fe107e32dfe8ca030772e47edbcef150b08c2987b760"
     },
     {
       "path": "plugins/local/rosakodu.launcher/AiAnswer.qml",

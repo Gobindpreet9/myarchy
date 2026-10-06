@@ -18,6 +18,32 @@ detached floor is pinned in a 660–680 band (measured 669px at width 720).
 Live Wayland/mixed-DPR qualification and the live attach → ready → gated-send
 pass remain pending and must be recorded separately.
 
+Live 1.22.0 qualification (2026-10-06, committed deployment with pre-replace
+backups and a DB snapshot): `submitfile` returned `previewing` and the retained
+reader reached `ready` at 8 rows / 3 columns / total 8 with no truncation for
+`rents-sample.csv`; the panel and the detached window both render the literal
+grid with every disclosure and the footer inside the window bounds on the live
+3440x1440 scale-1.25 display. A ragged file reported `CSV line 2 has 3 columns;
+the header has 2.`, and `submit` then answered `attachment-error` with busy
+false, an unchanged turn count and an idle broker: no dispatch.
+`omarchy restart shell` re-read the retained attachment to `ready` and kept the
+conversation and all 67 user workspaces; the shell log has no launcher QML,
+panel-load or broker errors. Three observations stay outside that pass: the
+status IPC `shell`/`appLibrary` flags read false while the panel runs its own
+desktop-entry fallback (host injection is omarchy-owned, the deployed lines are
+unchanged, and hint, search and launch all work); `hyprctl` reported the
+workspace window on a tiled right-column rect while it renders floating at
+center, so window geometry reporting is unverified although content fit is;
+and `AiState.supported` accepts only codex/hermes, so the live default agent
+`claude` gates the whole attach path until `~/.config/omarchy/defaults/agent`
+names a supported agent (set to `codex` for the test, restored to `claude`).
+One test incident: a second `submitfile` against the same already-ready
+attachment dispatched for real, which is the designed ready-plus-explicit-submit
+path; it ran only in the test conversation `ws-62943ec34e1535ba` (68th
+workspace, the user's 67 untouched) and ended with a codex authentication error
+and no answer. Mixed-DPR, a second display scale and a successful live provider
+send remain unrecorded.
+
 Reviewed checkpoint 1.21.2: all workspace loads gate submission and retire warm
 broker sessions; timeout responses are invalidated, cleared drafts survive,
 and epoch timestamps use `real`. Hydration trims legacy accumulated transcripts
