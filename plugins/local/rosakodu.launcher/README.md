@@ -180,8 +180,10 @@ Answer presentations are stored as workspace-scoped artifacts and
 a revision is recorded whenever those blocks actually change; transcripts saved
 before the artifact split still restore their inline blocks. A response
 interrupted by a restart returns as a retryable error
-instead of a spinner. Unpinned
-workspaces older than 30 days are pruned automatically. Saved workspaces are
+instead of a spinner. Automatic housekeeping preserves saved conversations;
+it no longer applies the legacy 20-unpinned/30-day deletion policy. That policy
+remains available only through an explicitly invoked store `prune` operation
+without `preserveWorkspaces: true`. Saved workspaces are
 searchable from the launcher: matching titles and summaries appear as distinct
 **Workspace** rows (above the web-search actions) and reopen the full
 conversation; the workspace currently on screen is excluded. The answer

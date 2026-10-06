@@ -1,5 +1,13 @@
 # rosakodu.launcher agent notes
 
+Automatic maintenance MUST send `{preserveWorkspaces: true}`. The old explicit
+store-prune policy deletes unpinned workspaces above 20 or older than 30 days;
+do not invoke it silently while restoring. Enabling the previously skipped
+cleanup path in 1.21.2 removed 47 live workspaces. They were recovered additively
+from a pre-update SQLite backup (no existing records overwritten), and 1.21.3
+preserves all 67 on subsequent AI entry. This is why load housekeeping and
+user-requested destructive retention must stay separate.
+
 Reviewed checkpoint 1.21.2: all workspace loads gate submission and retire warm
 broker sessions; timeout responses are invalidated, cleared drafts survive,
 and epoch timestamps use `real`. Hydration trims legacy accumulated transcripts
@@ -18,6 +26,14 @@ Checkpoint verification (2026-10-06, 1.21.2): exact index exported to scratch,
 172 Python (2 skipped), 114 main QtTests, 15 blocks, 23 visual, 12 answer,
 isolated service/store checks, audit and scratch restore pass. Root restoration
 has 28 passing regressions. Existing QML/Python resource warnings remain.
+
+Scoped live 1.21.2 check: committed-only deployment with backups/conflict review,
+restart preserved the synthetic CSV workspace's 3/8 filtered/sorted rows.
+Real Shift+Enter + X showed the tail of a ten-line draft; original draft restored.
+Detached reverse-Tab visibly focused New chat (Back/Expand absent); close/reopen
+retained the same workspace. Three cropped checkpoint screenshots were read.
+No provider request or launcher log error; unrelated shell warnings remain.
+This is not image-gallery/mixed-DPR or complete resource-budget requalification.
 
 Scene-graph lifetime trap: on a Wayland scale change Qt walks the item tree
 (`QQuickWindow::physicalDpiChanged` → devicePixelRatio item-change) and calls a

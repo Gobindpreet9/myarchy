@@ -94,6 +94,8 @@ ShellRoot {
                     check(!held.loadingLatest && held.restoreSettled, "Every load result must release the gate")
                     check(held.pruneQueued && held.storeQueue[0].op === "prune"
                         && held.storePending === 1, "Every settled load schedules pruning exactly once")
+                    check(JSON.parse(held.storeQueue[0].payload).preserveWorkspaces === true,
+                        "Automatic housekeeping must never delete saved conversations")
                     held.destroy()
                 }
                 finishLoad(snapshot)

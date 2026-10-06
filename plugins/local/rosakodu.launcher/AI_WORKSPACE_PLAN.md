@@ -1,5 +1,16 @@
 # AI Workspace: from launcher to learning, exploration, and mini-apps
 
+History-preserving maintenance correction (2026-10-06, **1.21.3**): the live
+1.21.2 check exposed that repairing the skipped cleanup path activated the
+legacy 20-unpinned/30-day deletion policy. The workspace count fell from 67 to
+20. The pre-update SQLite backup recovered only the 47 missing workspaces,
+48 artifacts, 111 interaction rows and 60 revisions; no existing rows were
+overwritten. Automatic service cleanup now passes `preserveWorkspaces: true`
+and removes only orphan artifacts, never saved conversations. A fresh AI entry
+retained all 67 pre-update workspace IDs. Store and service regressions pin
+this contract. Explicit manual store pruning retains its old behavior; no
+automatic history-retention policy is implied by earlier housekeeping notes.
+
 Reviewed checkpoint (2026-10-06, manifest **1.21.2**): the local source is
 represented by the explicit repository restore allowlist. Review corrections
 align saves with the 20-turn cap, distinguish authoritative full content from
@@ -26,6 +37,22 @@ and store checks; repository audit and scratch allowlist restoration all pass.
 The root restore suite passes 28 tests separately. Existing standalone QML and
 Python resource warnings remain; these software-rendered checks do not validate
 live Wayland lifecycle, a second scale or the remaining resource-budget gates.
+
+Scoped live checkpoint verification (2026-10-06, 1.21.2): applied only the 63
+committed launcher files after reviewing live-to-commit diffs, capturing a
+SQLite backup, and checking for source conflicts. The shell was stopped during
+replacement to avoid partial hot reload; desktop shell/bindings were untouched.
+Restart restored `ws-52ce449a43c89ab5` with **Sorted · Filtered**, `o`, **3 of 8
+rows**, Porto 600 / Lisbon 900 / Oslo 1200. Real Shift+Enter then `X` in a
+ten-line synthetic draft showed the tail inside the capped editor with Send
+pinned; the original draft was restored afterward. The detached window's
+reverse-Tab reached visibly focused **New chat**, not hidden Back; Expand was
+absent. Close/reopen kept the same workspace. Cropped screenshots
+`/tmp/opencode/checkpoint-live-restored.png`, `checkpoint-live-long-draft.png`
+and `checkpoint-live-detached.png` were read and visually inspected. No model
+request was sent. The shell log showed no launcher errors (unrelated portal and
+lock-explorer warnings remained). This checks these paths on the existing
+fractional display, not a new image-gallery/DPR or full resource qualification.
 
 Checkpoint preparation (2026-10-06, manifest **1.21.1**): bundled an in-memory
 store/broker fixture for `AiServiceCheck` and made internal helper-path/state-root

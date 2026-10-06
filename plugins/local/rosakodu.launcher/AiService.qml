@@ -219,7 +219,7 @@ Item {
         lastStoreWork = Date.now()
         if (job.op === "load" && !pruneQueued) {
             pruneQueued = true
-            storeRun("prune", {})
+            storeRun("prune", {preserveWorkspaces: true})
         }
         if (job.op === "load" && job.loadToken !== loadToken) {
             console.warn("Workspace store ignored a superseded load response")

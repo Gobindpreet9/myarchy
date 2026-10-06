@@ -579,15 +579,20 @@ def cmd_delete(conn, payload):
 def cmd_prune(conn, payload):
     if not isinstance(payload, dict):
         raise InputError("Prune payload must be a JSON object")
+    preserve = payload.get("preserveWorkspaces", False)
+    if not isinstance(preserve, bool):
+        raise InputError("preserveWorkspaces must be a boolean")
     with _transaction(conn):
-        # Unpinned workspaces are deleted when older than the cutoff, and in
-        # any case at most the 20 most recent unpinned remain.
-        cutoff = _iso(time.time() - PRUNE_DAYS * 86400)
-        unpinned = conn.execute("""SELECT id, updated_at FROM workspaces WHERE pinned = 0
-            ORDER BY updated_at DESC, rowid DESC""").fetchall()
-        keep = {row[0] for row in unpinned[:PRUNE_KEEP]}
-        ids = [row[0] for row in unpinned if row[0] not in keep or row[1] < cutoff]
-        pruned_workspaces = _delete_workspaces(conn, ids)
+        # Automatic launcher maintenance preserves saved conversations. The
+        # legacy retention policy remains available only to explicit prune calls.
+        pruned_workspaces = 0
+        if not preserve:
+            cutoff = _iso(time.time() - PRUNE_DAYS * 86400)
+            unpinned = conn.execute("""SELECT id, updated_at FROM workspaces WHERE pinned = 0
+                ORDER BY updated_at DESC, rowid DESC""").fetchall()
+            keep = {row[0] for row in unpinned[:PRUNE_KEEP]}
+            ids = [row[0] for row in unpinned if row[0] not in keep or row[1] < cutoff]
+            pruned_workspaces = _delete_workspaces(conn, ids)
         cursor = conn.execute("DELETE FROM artifacts WHERE workspace_id NOT IN (SELECT id FROM workspaces)")
         pruned_artifacts = max(cursor.rowcount, 0)
     return {"ok": True, "prunedWorkspaces": pruned_workspaces, "prunedArtifacts": pruned_artifacts}

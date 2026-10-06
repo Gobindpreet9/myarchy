@@ -315,6 +315,25 @@ class WorkspaceStoreTests(unittest.TestCase):
             remaining = {row[0] for row in db.execute("SELECT id FROM workspaces")}
         self.assertEqual(remaining, {f"ws-{index:02d}" for index in range(5, 25)})
 
+    def test_automatic_maintenance_preserves_old_and_excess_workspaces(self):
+        conn = store.open_store(self.root)
+        try:
+            for index in range(25):
+                store.cmd_save(conn, workspace_payload(f"ws-{index:02d}",
+                    interaction={"note": index}))
+            conn.execute("UPDATE workspaces SET updated_at = ?", (store._iso(time.time() - 40 * 86400),))
+            conn.commit()
+        finally:
+            conn.close()
+        code, result, err = self.cli("prune", {"preserveWorkspaces": True})
+        self.assertEqual(code, 0, err)
+        self.assertEqual(result["prunedWorkspaces"], 0)
+        with contextlib.closing(self.db()) as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM workspaces").fetchone()[0], 25)
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM interaction_state").fetchone()[0], 25)
+        code, _, _ = self.cli("prune", {"preserveWorkspaces": "true"})
+        self.assertNotEqual(code, 0)
+
     def test_prune_deletes_every_unpinned_workspace_older_than_the_window(self):
         conn = store.open_store(self.root)
         try:
