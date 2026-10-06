@@ -77,5 +77,14 @@
         }
       ]
     }
+  ],
+  "local_plugins": [
+    {
+      "id": "rosakodu.launcher",
+      "path": "plugins/local/rosakodu.launcher",
+      "version": "1.21.2",
+      "provenance": "Original local native launcher; no upstream base commit",
+      "restore_allowlist": "manifest.json"
+    }
   ]
 }

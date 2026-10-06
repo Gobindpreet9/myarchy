@@ -1,3 +1,10 @@
 __pycache__/
 *.py[cod]
 *.swp
+plugins/local/**/.git/
+plugins/local/**/*.db
+plugins/local/**/*.db-wal
+plugins/local/**/*.db-shm
+plugins/local/**/media/
+!plugins/local/rosakodu.launcher/tests/fixtures/media/
+!plugins/local/rosakodu.launcher/tests/fixtures/media/gallery.png
