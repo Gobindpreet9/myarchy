@@ -165,7 +165,7 @@ Column {
         text: String(root.block.note || "")
         textFormat: Text.PlainText
         wrapMode: Text.Wrap
-        color: root.alpha(root.foreground, 0.55)
+        color: root.alpha(root.foreground, 0.76)
         font.pixelSize: Satin.type.label
     }
 }

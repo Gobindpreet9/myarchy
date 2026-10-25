@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtTest
 import ".." as Launcher
 import "../AiFormula.js" as Formula
+import "TestJson.js" as TestJson
 
 TestCase {
     id: testCase
@@ -502,5 +503,546 @@ TestCase {
         rect = findChild(renderer, "aiDiagramRect_0_0");
         compare(rect.height, height, "unlinked geometry is untouched");
         verify(rect.rotation <= 180 && rect.rotation >= -180, "out-of-range results clamp");
+    }
+
+    // ---- calc block (typed computation runtime) ------------------------
+    property var calcBlock: ({
+        type: "calc", title: "Vendor score", note: "Illustrative <i>fixture</i> numbers.",
+        inputs: [
+            {id: "wq", label: "Quality <b>weight</b>", unit: "", min: 0, max: 10, step: 1, value: 3, basis: "assumption"},
+            {id: "budget", label: "Budget", unit: "EUR/h", min: 0, max: 200, step: 5, value: 60, basis: "provided"}],
+        tables: [{id: "opts", label: "Vendors", columns: [
+                {id: "name", label: "Vendor", unit: "", kind: "text", expression: ""},
+                {id: "rate", label: "Rate", unit: "EUR/h", kind: "number", expression: ""},
+                {id: "quality", label: "Quality", unit: "", kind: "number", expression: ""},
+                {id: "value", label: "Weighted", unit: "", kind: "formula", expression: "quality*wq"}],
+            rows: [["<b>x</b> Alpha", "50", "8", ""], ["Beta", "40", "6", ""], ["Gamma", "65", "9", ""]]}],
+        cells: [
+            {id: "avg_rate", label: "Average rate", expression: "mean(opts.rate)", unit: "EUR/h", decimals: 2, note: "Mean of the three quotes."},
+            {id: "headroom", label: "Headroom", expression: "budget-avg_rate", unit: "EUR/h", decimals: 2, note: ""},
+            {id: "score", label: "Score <b>x</b>", expression: "sum(opts.value)", unit: "", decimals: 1, note: ""},
+            {id: "per_point", label: "Cost per point", expression: "avg_rate/wq", unit: "EUR/h", decimals: 2, note: ""},
+            {id: "weekly", label: "Per day", expression: "per_point*8[h]", unit: "EUR", decimals: 2, note: ""}]
+    })
+
+    function calcWith(change) {
+        var b = JSON.parse(JSON.stringify(calcBlock));
+        change(b);
+        return b;
+    }
+    function showCalc(block, state) {
+        testCase.width = 660;
+        renderer.blocks = [];
+        wait(10);
+        renderer.uiState = state || ({});
+        renderer.blocks = [block];
+        wait(40);
+    }
+    function textsUnder(item) {
+        return descendants(item).filter(function(it) { return it.text !== undefined && it.textFormat !== undefined; });
+    }
+
+    function test_calcRendersCellsTableAndBadges() {
+        showCalc(calcBlock);
+        var calc = findChild(renderer, "aiCalc");
+        verify(calc !== null);
+        compare(calc.block.type, "calc", "the binding override must not shadow block");
+        compare(findChild(renderer, "aiCalcCell_0").text, "51.67 EUR/h");
+        compare(findChild(renderer, "aiCalcCell_1").text, "8.33 EUR/h");
+        compare(findChild(renderer, "aiCalcCell_2").text, "69.0");
+        compare(findChild(renderer, "aiCalcCell_4").text, "137.78 EUR");
+        compare(findChild(renderer, "aiCalcCellNote_0").text, "Mean of the three quotes.");
+        compare(findChild(renderer, "aiCalcBasis_0").text, "assumption");
+        compare(findChild(renderer, "aiCalcBasis_1").text, "provided");
+        compare(findChild(renderer, "aiCalcUnit_1").text, "EUR/h");
+        compare(findChild(renderer, "aiCalcField_1").text, "60");
+        compare(findChild(renderer, "aiCalcGridHeader_1").text, "Rate (EUR/h)");
+        compare(findChild(renderer, "aiCalcGridCell_0_3").text, "24.00");
+        compare(findChild(renderer, "aiCalcGridCell_2_3").text, "27.00");
+        compare(findChild(renderer, "aiCalcNote").text, calcBlock.note);
+        verify(!findChild(renderer, "aiCalcReset").enabled, "reset needs a change");
+        verify(!findChild(renderer, "aiCalcRestoreNote").visible);
+        verify(!findChild(renderer, "aiCalcCellError_0").visible);
+        verify(!findChild(renderer, "aiCalcProv_0").visible);
+    }
+
+    function test_calcTextIsLiteral() {
+        showCalc(calcBlock);
+        var calc = findChild(renderer, "aiCalc");
+        var texts = textsUnder(calc), literal = 0;
+        for (var i = 0; i < texts.length; ++i) {
+            var t = texts[i];
+            if (t.text.indexOf("<b>") >= 0 || t.text.indexOf("<i>") >= 0) {
+                compare(t.textFormat, Text.PlainText, "markup stays literal: " + t.text);
+                ++literal;
+            }
+        }
+        verify(literal >= 4, "input label, cell label, table cell and note: " + literal);
+        compare(findChild(renderer, "aiCalcCellLabel_2").text, "Score <b>x</b>");
+        compare(findChild(renderer, "aiCalcInputLabel_0").text, "Quality <b>weight</b>");
+        compare(findChild(renderer, "aiCalcGridCell_0_0").text, "<b>x</b> Alpha");
+    }
+
+    function test_calcKeyboardAndTypedEditsEmitOnce() {
+        showCalc(calcBlock);
+        uiSpy.clear();
+        var slider = findChild(renderer, "aiCalcSlider_0");
+        verify(slider.activeFocusOnTab);
+        slider.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Right);
+        compare(uiSpy.count, 1);
+        compare(uiSpy.signalArguments[0][0], 0);
+        compare(uiSpy.signalArguments[0][1], "calc:0");
+        verify(TestJson.equal(uiSpy.signalArguments[0][2], {wq: {v: 4, u: ""}}));
+        // cells follow without waiting for the host round trip
+        compare(findChild(renderer, "aiCalcCell_2").text, "92.0");
+        compare(findChild(renderer, "aiCalcCell_3").text, "12.92 EUR/h");
+        compare(findChild(renderer, "aiCalcField_0").text, "4");
+        verify(findChild(renderer, "aiCalcReset").enabled);
+        // typing: Enter commits once, out-of-range clamps, junk is reverted silently
+        uiSpy.clear();
+        var field = findChild(renderer, "aiCalcField_1");
+        field.forceActiveFocus(Qt.TabFocusReason);
+        field.selectAll();
+        keyClick("8");
+        keyClick("0");
+        keyClick(Qt.Key_Return);
+        compare(uiSpy.count, 1);
+        verify(TestJson.equal(uiSpy.signalArguments[0][2], {wq: {v: 4, u: ""}, budget: {v: 80, u: "EUR/h"}}));
+        compare(findChild(renderer, "aiCalcCell_1").text, "28.33 EUR/h");
+        uiSpy.clear();
+        field.selectAll();
+        keyClick("9"); keyClick("9"); keyClick("9");
+        keyClick(Qt.Key_Return);
+        compare(uiSpy.count, 1);
+        compare(uiSpy.signalArguments[0][2].budget.v, 200, "typed values clamp to the range");
+        compare(field.text, "200");
+        uiSpy.clear();
+        field.selectAll();
+        keyClick("x");
+        keyClick(Qt.Key_Return);
+        compare(uiSpy.count, 0, "non-numeric text emits nothing");
+        compare(field.text, "200", "and is reverted");
+        // Home/End on a slider
+        slider.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_End);
+        compare(uiSpy.signalArguments[uiSpy.count - 1][2].wq.v, 10);
+        // Reset restores the defaults and clears the key with an empty object
+        uiSpy.clear();
+        var reset = findChild(renderer, "aiCalcReset");
+        verify(reset.enabled);
+        reset.clicked();
+        compare(uiSpy.count, 1);
+        compare(uiSpy.signalArguments[0][1], "calc:0");
+        compare(JSON.stringify(uiSpy.signalArguments[0][2]), "{}");
+        compare(findChild(renderer, "aiCalcCell_0").text, "51.67 EUR/h");
+        compare(findChild(renderer, "aiCalcCell_2").text, "69.0");
+        compare(findChild(renderer, "aiCalcField_1").text, "60");
+        verify(!reset.enabled);
+    }
+
+    function test_calcErrorsAreNeverSilentZeros() {
+        showCalc(calcBlock);
+        var slider = findChild(renderer, "aiCalcSlider_0");
+        slider.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Home);
+        compare(findChild(renderer, "aiCalcField_0").text, "0");
+        compare(findChild(renderer, "aiCalcCell_3").text, "—");
+        compare(findChild(renderer, "aiCalcCell_4").text, "—");
+        var own = findChild(renderer, "aiCalcCellError_3");
+        verify(own.visible);
+        verify(own.text.indexOf("Cannot compute: ") === 0 && own.text.length > 20, own.text);
+        var detail = own.text.substring("Cannot compute: ".length);
+        var waiting = findChild(renderer, "aiCalcCellError_4");
+        verify(waiting.visible);
+        compare(waiting.text, "Waiting on Cost per point: " + detail);
+        verify(findChild(renderer, "aiCalcCell_3").Accessible.name.indexOf("no value") >= 0);
+        verify(waiting.Accessible.name === waiting.text);
+        // unaffected cells still compute
+        compare(findChild(renderer, "aiCalcCell_0").text, "51.67 EUR/h");
+        verify(!findChild(renderer, "aiCalcCellError_0").visible);
+        // the failing chain is shown in the provenance of the dependant
+        var toggle = findChild(renderer, "aiCalcProvToggle_4");
+        toggle.clicked();
+        verify(findChild(renderer, "aiCalcProv_4").visible);
+        var error = findChild(renderer, "aiCalcProvError_4");
+        verify(error.visible);
+        verify(error.text.indexOf("Waiting on Cost per point: ") === 0);
+        verify(error.text.indexOf("Failing chain: weekly → per_point") >= 0, error.text);
+        // fixing the input recovers every dependant
+        keyClick(Qt.Key_Right);
+        compare(findChild(renderer, "aiCalcCell_4").text, "137.78 EUR".length > 0 ? findChild(renderer, "aiCalcCell_4").text : "");
+        verify(!findChild(renderer, "aiCalcCellError_3").visible);
+        compare(findChild(renderer, "aiCalcCell_3").text, "51.67 EUR/h");
+    }
+
+    function test_calcProvenanceDisclosureAndClickThrough() {
+        showCalc(calcBlock);
+        var toggle = findChild(renderer, "aiCalcProvToggle_4");
+        verify(toggle !== null && toggle.activeFocusOnTab);
+        compare(toggle.text, "How is this calculated?");
+        toggle.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Space);
+        verify(findChild(renderer, "aiCalcProv_4").visible, "Space opens the disclosure");
+        compare(findChild(renderer, "aiCalcProvFormula_4").text, "Formula: per_point*8[h]");
+        verify(findChild(renderer, "aiCalcProvUnit_4").text.indexOf("Result unit: EUR") === 0);
+        verify(findChild(renderer, "aiCalcProvRounding_4").text.indexOf("half away from zero to 2 places: 137.78") > 0);
+        var ref = findChild(renderer, "aiCalcProvRef_4_0");
+        compare(ref.modelData.line, "per_point = 17.22 EUR/h  ·  calculated cell");
+        verify(ref.activeFocusOnTab);
+        verify(!findChild(renderer, "aiCalcProv_3").visible);
+        ref.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Return);
+        wait(20);
+        verify(findChild(renderer, "aiCalcProv_3").visible, "a cell reference opens that cell's provenance");
+        verify(findChild(renderer, "aiCalcProvToggle_3").activeFocus, "and moves focus there");
+        compare(findChild(renderer, "aiCalcProvFormula_3").text, "Formula: avg_rate/wq");
+        // an input reference shows its basis, and is not a tab stop
+        var inputRef = findChild(renderer, "aiCalcProvRef_3_1");
+        compare(inputRef.modelData.line, "wq = 3.00  ·  assumption");
+        verify(!inputRef.activeFocusOnTab);
+        // Esc-free close: the toggle collapses again
+        toggle.clicked();
+        verify(!findChild(renderer, "aiCalcProv_4").visible);
+        // a table-backed cell lists the column it reads
+        findChild(renderer, "aiCalcProvToggle_0").clicked();
+        compare(findChild(renderer, "aiCalcProvRef_0_0").modelData.line.indexOf("opts.rate = "), 0);
+    }
+
+    function test_nestedUnitPowerDoesNotBlockTheRenderer() {
+        var hostile = JSON.parse(JSON.stringify(calcBlock));
+        var expression = "1[m]";
+        for (var i = 0; i < 12; ++i) expression = "(" + expression + ")^9";
+        hostile.cells[0].expression = expression;
+        showCalc(hostile);
+        var calc = findChild(renderer, "aiCalc");
+        verify(calc !== null);
+        compare(calc.calcResult.nodes[hostile.cells[0].id].err.code, "RANGE");
+    }
+
+    function test_calcRestoreRules() {
+        // valid saved values apply; unknown ids are ignored without a note
+        showCalc(calcBlock, {"calc:0": {wq: {v: 5, u: ""}, budget: {v: 80, u: "EUR/h"}, ghost: {v: 1, u: ""}}});
+        compare(findChild(renderer, "aiCalcField_0").text, "5");
+        compare(findChild(renderer, "aiCalcField_1").text, "80");
+        compare(findChild(renderer, "aiCalcCell_2").text, "115.0");
+        verify(!findChild(renderer, "aiCalcRestoreNote").visible);
+        verify(findChild(renderer, "aiCalcReset").enabled);
+        var rules = [
+            {wq: {v: 5, u: ""}, budget: {v: 80, u: "USD/h"}},
+            {wq: {v: 5, u: ""}, budget: {v: NaN, u: "EUR/h"}},
+            {wq: {v: 5, u: ""}, budget: {v: 999, u: "EUR/h"}},
+            {wq: {v: 5, u: ""}, budget: {v: -1, u: "EUR/h"}},
+            {wq: {v: 5, u: ""}, budget: "80"},
+            {wq: {v: 5, u: ""}, budget: {v: "80", u: "EUR/h"}}
+        ];
+        for (var i = 0; i < rules.length; ++i) {
+            showCalc(calcBlock, {"calc:0": rules[i]});
+            compare(findChild(renderer, "aiCalcField_1").text, "60", "rule " + i + " resets that input");
+            compare(findChild(renderer, "aiCalcField_0").text, "5", "rule " + i + " keeps the valid one");
+            verify(findChild(renderer, "aiCalcRestoreNote").visible, "rule " + i);
+            compare(findChild(renderer, "aiCalcRestoreNote").text, "Some saved values no longer match this calculation and were reset.");
+        }
+        // a unit that changed in the block resets that input too
+        showCalc(calcWith(function(b) { b.inputs[1].unit = "USD/h"; b.tables[0].columns[1].unit = "USD/h"; }),
+                 {"calc:0": {budget: {v: 80, u: "EUR/h"}}});
+        compare(findChild(renderer, "aiCalcField_1").text, "60");
+        verify(findChild(renderer, "aiCalcRestoreNote").visible);
+        // a stored entry that is not an object is ignored
+        showCalc(calcBlock, {"calc:0": 7});
+        verify(!findChild(renderer, "aiCalcRestoreNote").visible);
+        compare(findChild(renderer, "aiCalcField_1").text, "60");
+        // the host round trip replaces the state; the note clears once saved is clean
+        showCalc(calcBlock, {"calc:0": {budget: {v: 999, u: "EUR/h"}}});
+        verify(findChild(renderer, "aiCalcRestoreNote").visible);
+        renderer.uiState = ({"calc:0": {}});
+        wait(20);
+        verify(!findChild(renderer, "aiCalcRestoreNote").visible);
+        // derived values are never persisted
+        uiSpy.clear();
+        findChild(renderer, "aiCalcSlider_1").forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Right);
+        verify(TestJson.equal(uiSpy.signalArguments[0][2], {budget: {v: 65, u: "EUR/h"}}));
+    }
+
+    function test_calcTamperedBlocksShowOneHonestLine() {
+        var tampered = [
+            calcWith(function(b) { b.cells[0].expression = "headroom"; b.cells[1].expression = "avg_rate"; }),
+            calcWith(function(b) {
+                b.inputs = [];
+                for (var i = 0; i < 13; ++i) b.inputs.push({id: "i" + i, label: "I", unit: "", min: 0, max: 5, step: 1, value: 1, basis: "assumption"});
+            }),
+            calcWith(function(b) { b.cells[0].expression = "frobnicate(1)"; }),
+            calcWith(function(b) { b.inputs[0].min = 5; b.inputs[0].max = 1; }),
+            calcWith(function(b) { b.inputs[0].basis = "guess"; }),
+            calcWith(function(b) { b.inputs[0].value = 50; }),
+            calcWith(function(b) { b.cells = "nope"; }),
+            calcWith(function(b) { b.tables[0].rows[0] = ["short"]; })
+        ];
+        for (var i = 0; i < tampered.length; ++i) {
+            showCalc(tampered[i]);
+            var line = findChild(renderer, "aiCalcInvalid");
+            verify(line !== null && line.visible, "tampered " + i);
+            compare(line.text, "This calculation can't be shown.");
+            compare(line.textFormat, Text.PlainText);
+            compare(findChild(renderer, "aiCalcReset"), null, "no partial render " + i);
+            compare(findChild(renderer, "aiCalcCell_0"), null);
+            compare(findChild(renderer, "aiCalcField_0"), null);
+            compare(findChild(renderer, "aiCalcNote"), null);
+            compare(findChild(renderer, "aiCalcGridCell_0_0"), null);
+        }
+        // the component recovers when a valid block replaces a tampered one
+        showCalc(calcBlock);
+        verify(findChild(renderer, "aiCalcInvalid").visible === false);
+        compare(findChild(renderer, "aiCalcCell_0").text, "51.67 EUR/h");
+    }
+
+    function bigCalcBlock() {
+        var cols = [{id: "c0", label: "Name", unit: "", kind: "text", expression: ""}], rows = [], i, j;
+        for (j = 1; j <= 9; ++j) cols.push({id: "c" + j, label: "N" + j, unit: "", kind: "number", expression: ""});
+        cols.push({id: "c10", label: "Sum", unit: "", kind: "formula", expression: "c1+c2"});
+        cols.push({id: "c11", label: "Dbl", unit: "", kind: "formula", expression: "c3*2"});
+        for (i = 0; i < 40; ++i) {
+            var row = ["row" + i];
+            for (j = 1; j <= 9; ++j) row.push(String(i + j));
+            row.push("", "");
+            rows.push(row);
+        }
+        return {type: "calc", title: "Big", note: "", inputs: [], cells: [
+            {id: "total", label: "Total", expression: "sum(t.c10)", unit: "", decimals: 0, note: ""}],
+            tables: [{id: "t", label: "Wide", columns: cols, rows: rows}]};
+    }
+
+    function test_calcTableDelegatesAreBounded() {
+        showCalc(bigCalcBlock());
+        var calc = findChild(renderer, "aiCalc");
+        function cellCount() {
+            return descendants(calc).filter(function(it) { return it.objectName.indexOf("aiCalcGridCell_") === 0; }).length;
+        }
+        compare(cellCount(), 12 * 12, "collapsed: the first 12 rows only");
+        compare(findChild(renderer, "aiCalcGridToggle").text, "Show all 40 rows");
+        compare(findChild(renderer, "aiCalcGridCell_0_10").text, "3.00");
+        compare(findChild(renderer, "aiCalcGridCell_11_11").text, "28.00");
+        // sum(c1+c2) over 40 rows: sum(i*2+3) = 2*780+120 = 1680
+        compare(findChild(renderer, "aiCalcCell_0").text, "1680");
+        var toggle = findChild(renderer, "aiCalcGridToggle");
+        toggle.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Space);
+        wait(30);
+        compare(cellCount(), 40 * 12, "expanded: the 40 x 12 ceiling");
+        verify(cellCount() <= 480);
+        compare(findChild(renderer, "aiCalcGridToggle").text, "Show fewer rows");
+        // the grid scrolls inside its own Flickable; the block never overflows
+        var scroller = findChild(renderer, "aiCalcGridScroll");
+        verify(scroller.contentWidth > scroller.width, "12 columns cannot fit 660px at 72px each");
+        verify(scroller.activeFocusOnTab);
+        var before = scroller.contentX;
+        scroller.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_End);
+        verify(scroller.contentX > before, "navigation keys scroll the grid");
+        verify(calc.childrenRect.width <= calc.width + 0.5);
+        // two tables stay within the same ceiling
+        var two = bigCalcBlock();
+        two.tables.push(JSON.parse(JSON.stringify(two.tables[0])));
+        two.tables[1].id = "u";
+        two.cells = [];
+        for (var k = 0; k < two.tables[1].columns.length; ++k) two.tables[1].columns[k].id = "d" + k;
+        for (var f = 10; f <= 11; ++f) two.tables[1].columns[f].expression = f === 10 ? "d1+d2" : "d3*2";
+        showCalc(two);
+        compare(descendants(findChild(renderer, "aiCalc")).filter(function(it) { return it.objectName.indexOf("aiCalcGridCell_") === 0; }).length, 2 * 12 * 12);
+    }
+
+    function test_calcFocusOrderAndContrast() {
+        showCalc(calcBlock);
+        var calc = findChild(renderer, "aiCalc");
+        // enable Reset so it joins the chain, then open one disclosure with a cell reference
+        findChild(renderer, "aiCalcSlider_0").forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Right);
+        findChild(renderer, "aiCalcProvToggle_4").clicked();
+        var current = findChild(renderer, "aiCalcSlider_0"), order = [];
+        current.forceActiveFocus(Qt.TabFocusReason);
+        for (var i = 0; i < 40 && current; ++i) {
+            if (current.objectName.indexOf("aiCalc") === 0 && order.indexOf(current.objectName) < 0) order.push(current.objectName);
+            current = current.nextItemInFocusChain(true);
+        }
+        var expected = ["aiCalcSlider_0", "aiCalcField_0", "aiCalcSlider_1", "aiCalcField_1", "aiCalcReset",
+                        "aiCalcUndo", "aiCalcCopy", "aiCalcDuplicate", "aiCalcProvToggle_0", "aiCalcProvToggle_1", "aiCalcProvToggle_2", "aiCalcProvToggle_3",
+                        "aiCalcProvToggle_4", "aiCalcProvRef_4_0"];
+        compare(order.slice(0, expected.length).join(","), expected.join(","));
+        // readable text: every visible informational Text is at or above the 0.76 floor
+        findChild(renderer, "aiCalcProvToggle_0").clicked();
+        var texts = textsUnder(calc), checked = 0;
+        for (var j = 0; j < texts.length; ++j) {
+            var t = texts[j];
+            if (!t.visible || t.text.length === 0 || t.color === undefined) continue;
+            verify(t.color.a >= 0.76, (t.objectName || t.text) + " alpha " + t.color.a);
+            ++checked;
+        }
+        verify(checked > 25, "texts checked: " + checked);
+        // focus rings: field and slider handle are visibly focused
+        var field = findChild(renderer, "aiCalcField_1");
+        field.forceActiveFocus(Qt.TabFocusReason);
+        compare(field.background.border.width, 2);
+    }
+
+    property var wrappedRow: null
+    // The pane hands blocks to AiBlocks through a Repeater delegate's modelData.
+    Repeater {
+        id: wrappedTurns
+        model: []
+        delegate: Item {
+            required property var modelData
+            Component.onCompleted: testCase.wrappedRow = modelData
+        }
+    }
+
+    function test_calcRendersBlocksWrappedByTheListModelPath() {
+        // Real turn rows reach AiBlocks as QML sequence/reference wrappers
+        // (Array.isArray is false all the way down), not plain JS objects.
+        wrappedTurns.model = [{blocks: [calcBlock]}];
+        wait(20);
+        var wrapped = wrappedRow.blocks;
+        verify(!Array.isArray(wrapped), "the model really hands out wrapped blocks");
+        verify(!Array.isArray(wrapped[0].inputs), "and the nesting is wrapped too");
+        testCase.width = 660;
+        renderer.blocks = [];
+        wait(10);
+        renderer.uiState = ({"calc:0": {budget: {v: 80, u: "EUR/h"}}});
+        renderer.blocks = wrapped;
+        wait(40);
+        verify(findChild(renderer, "aiCalcInvalid") === null || !findChild(renderer, "aiCalcInvalid").visible);
+        compare(findChild(renderer, "aiCalcCell_1").text, "28.33 EUR/h");
+        compare(findChild(renderer, "aiCalcGridCell_0_3").text, "24.00");
+        compare(findChild(renderer, "aiCalcField_1").text, "80");
+        wrappedTurns.model = [];
+    }
+
+    function calcMetrics() {
+        var calc = findChild(renderer, "aiCalc");
+        return {width: calc.width, height: calc.implicitHeight, content: calc.childrenRect.width};
+    }
+
+    function test_calcNarrowAndWideHaveNoHorizontalOverflow() {
+        showCalc(calcBlock);
+        findChild(renderer, "aiCalcSlider_0").forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Home);   // exercises the error lines too
+        findChild(renderer, "aiCalcProvToggle_4").clicked();
+        var sizes = [420, 760, 320];
+        for (var s = 0; s < sizes.length; ++s) {
+            testCase.width = sizes[s];
+            wait(40);
+            var m = calcMetrics();
+            compare(m.width, sizes[s]);
+            verify(m.content <= m.width + 0.5, "content " + m.content + " within " + m.width);
+            var texts = textsUnder(findChild(renderer, "aiCalc"));
+            for (var i = 0; i < texts.length; ++i) {
+                var t = texts[i];
+                if (!t.visible || t.width === undefined) continue;
+                var pos = t.mapToItem(findChild(renderer, "aiCalc"), 0, 0);
+                var scrolled = false;
+                for (var p = t.parent; p; p = p.parent) if (p.objectName.indexOf("aiCalcGridScroll") === 0) scrolled = true;
+                if (!scrolled) verify(pos.x + t.width <= sizes[s] + 1, (t.objectName || t.text) + " overflows at " + sizes[s]);
+            }
+            verify(m.height > 100);
+            console.log("calc height at width " + sizes[s] + ": " + m.height + " (errors + one disclosure open)");
+        }
+        showCalc(calcWith(function() {}));
+        for (var w = 0; w < 2; ++w) {
+            testCase.width = w === 0 ? 420 : 760;
+            wait(40);
+            console.log("calc height at width " + testCase.width + ": " + calcMetrics().height + " (defaults, all collapsed) open="
+                + findChild(renderer, "aiCalcProv_4").visible + " err=" + findChild(renderer, "aiCalcCellError_3").visible);
+        }
+    }
+
+    // ---- editable calc data through the real pane route (appended) ----------
+    // AiService keeps turns in a `ListModel { dynamicRoles: true }` as
+    // `append({payload: turn})`; AiAnswer copies `payload.blocks[i]` into the array it
+    // gives AiBlocks. Each block is then a V4 wrapper (Array.isArray is false at every
+    // level, table rows included), so AiCalc must JSON-copy before compiling.
+    ListModel { id: calcTurnModel; dynamicRoles: true }
+    property var modelRow: null
+    Repeater {
+        id: modelTurns
+        model: calcTurnModel
+        delegate: Item {
+            required property var payload
+            Component.onCompleted: testCase.modelRow = payload
+        }
+    }
+    function calcGrid() { return findChild(renderer, "aiCalcGrid_0"); }
+    function gridCell(r, c) { return findChild(calcGrid(), "aiCalcGridCell_" + r + "_" + c); }
+
+    function test_calcEditsKeepWorkingOnTheV4WrapperRoute() {
+        calcTurnModel.clear();
+        calcTurnModel.append({payload: {id: "t1", blocks: [calcBlock]}});
+        wait(20);
+        var block = modelRow.blocks[0];
+        verify(!Array.isArray(block.inputs) && !Array.isArray(block.tables) && !Array.isArray(block.tables[0].rows),
+               "wrapped all the way down");
+        testCase.width = 660;
+        renderer.blocks = [];
+        wait(10);
+        renderer.uiState = ({});
+        renderer.blocks = [block];
+        wait(40);
+        var calc = findChild(renderer, "aiCalc");
+        verify(calc.valid, "a wrapped block compiles");
+        var builds = calc.meter.builds;
+        uiSpy.clear();
+        // a table edit through the grid: exactly one emission carrying `_d`
+        var scroll = findChild(calcGrid(), "aiCalcGridScroll");
+        scroll.forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Home, Qt.ControlModifier);
+        keyClick(Qt.Key_Right);
+        keyClick("9");
+        keyClick(Qt.Key_Return);
+        compare(uiSpy.count, 1);
+        compare(uiSpy.signalArguments[0][1], "calc:0");
+        verify(TestJson.equal(uiSpy.signalArguments[0][2], {_d: {opts: {e: {"0|rate": "9"}}}}));
+        compare(gridCell(0, 1).text, "9");
+        compare(gridCell(0, 3).text, "24.00", "quality 8 x weight 3 is untouched by the rate edit");
+        compare(findChild(renderer, "aiCalcCell_0").text, "38.00 EUR/h", "mean(9, 40, 65) / 3");
+        compare(calc.meter.builds, builds + 1);
+        // the host answers: the same state comes back and nothing is lost
+        renderer.uiState = ({"calc:0": JSON.parse(JSON.stringify(uiSpy.signalArguments[0][2]))});
+        wait(20);
+        compare(gridCell(0, 1).text, "9");
+        compare(calc.undoStack.length, 1, "an echo keeps the undo history");
+        // an input move on the same wrapper does not recompile
+        findChild(renderer, "aiCalcSlider_0").forceActiveFocus(Qt.TabFocusReason);
+        keyClick(Qt.Key_Right);
+        compare(calc.meter.builds, builds + 1);
+        verify(TestJson.equal(uiSpy.signalArguments[uiSpy.count - 1][2],
+                {wq: {v: 4, u: ""}, _d: {opts: {e: {"0|rate": "9"}}}}));
+        // undo twice returns to the authored block and emits {}
+        keyClick(Qt.Key_Z, Qt.ControlModifier);
+        keyClick(Qt.Key_Z, Qt.ControlModifier);
+        compare(JSON.stringify(uiSpy.signalArguments[uiSpy.count - 1][2]), "{}");
+        compare(gridCell(0, 1).text, "50");
+        calcTurnModel.clear();
+    }
+
+    function test_calcNarrowAndWideKeepTheGridAndScenariosInside() {
+        showCalc(calcBlock, {"calc:0": {wq: {v: 5, u: ""}, _d: {opts: {e: {"2|rate": "70"}}},
+            _s: [{n: "Heavy", v: {wq: {v: 9, u: ""}}}, {n: "Light", v: {wq: {v: 1, u: ""}}}, {n: "Mid <b>x</b>", v: {wq: {v: 6, u: ""}}}]}});
+        findChild(renderer, "aiCalcScenariosToggle").clicked();
+        wait(30);
+        findChild(renderer, "aiCalcScenariosCompare").clicked();
+        wait(40);
+        var calc = findChild(renderer, "aiCalc");
+        var sizes = [420, 760];
+        for (var s = 0; s < sizes.length; ++s) {
+            testCase.width = sizes[s];
+            wait(60);
+            var m = calcMetrics();
+            compare(m.width, sizes[s]);
+            verify(m.content <= m.width + 0.5, "content " + m.content + " within " + m.width);
+            console.log("calc block height at width " + sizes[s] + ": " + m.height + " (edited cell, 3 scenarios, compare open)");
+        }
+        compare(findChild(renderer, "aiCalcScenariosColumn_3").text, "Mid <b>x</b>", "scenario names stay literal");
+        compare(findChild(renderer, "aiCalcScenariosColumn_3").textFormat, Text.PlainText);
+        compare(gridCell(2, 1).text, "70");
+        compare(findChild(renderer, "aiCalcDiscard").text, "Discard my edits (1)");
     }
 }

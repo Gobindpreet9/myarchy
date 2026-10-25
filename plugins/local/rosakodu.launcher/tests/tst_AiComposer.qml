@@ -100,6 +100,12 @@ TestCase {
         compare(input.text, "")
     }
 
+    function test_placeholderMeetsReadableContrast() {
+        // Measured on the live Crimson Gold surface: 0.58 was 3.4:1 (below AA);
+        // >= 0.76 is about 5:1 on the worst surface sampled.
+        verify(input.placeholderTextColor.a >= 0.75, "placeholder alpha " + input.placeholderTextColor.a)
+        verify(input.placeholderTextColor.a < 1.0, "the placeholder stays visibly subordinate to typed text")
+    }
     function test_typingIsOnlyDraftEditing() {
         typeText("Tell me about Stanley Park")
         compare(input.text, "Tell me about Stanley Park")

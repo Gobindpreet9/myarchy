@@ -10,6 +10,7 @@ ShellRoot {
     property string home: Quickshell.env("HOME")
     property string fixtureScript: decodeURIComponent(Qt.resolvedUrl("tests/ai_preview_stub.py").toString().replace(/^file:\/\//, ""))
     property string brokerScript: decodeURIComponent(Qt.resolvedUrl("tests/ai_service_stub.py").toString().replace(/^file:\/\//, ""))
+    property string csvStub: decodeURIComponent(Qt.resolvedUrl("tests/ai_csv_source_stub.py").toString().replace(/^file:\/\//, ""))
     property var service: null
     property var failures: []
     property var condition: null
@@ -67,7 +68,7 @@ ShellRoot {
             console.error(failures.join("\n"))
             Qt.exit(1)
         } else {
-            console.log("AiPreviewService: real scratch CSV, pre-mutation gates, retry/source replacement, retained surfaces, same-path workspace/restore invalidation and explicit STUB-only submit passed")
+            console.log("AiPreviewService: real scratch CSV, pre-mutation gates, retry/source replacement, retained surfaces, same-path workspace/restore invalidation, column-type correction reset/transport, Keep full data offer gates and explicit STUB-only submit passed")
             Qt.quit()
         }
     }
@@ -145,8 +146,16 @@ ShellRoot {
             },
             function() {
                 eq(service.previewData.rows[0], ["Changed", "42"], "Retry securely rereads changed source")
+                eq(service.previewTypeOverrides, [], "A fresh read starts with no column-type corrections")
+                eq(service.setPreviewColumnType(1, "number"), true, "The ready preview accepts a correction")
+                eq(service.setPreviewColumnType(2, "number"), false, "A column past the preview is refused")
+                eq(service.setPreviewColumnType(0, "bogus"), false, "An unknown type is refused")
+                eq(service.previewTypeOverrides, ["", "number"], "Only the valid correction is kept")
+                eq(service.turns.length, 0, "Correcting a type never sends")
+                eq(service.brokerLive, false, "Correcting a type never starts a provider")
                 savedToken = service.attachmentPreview.token
                 service.workspaceId = "ws-another"
+                eq(service.previewTypeOverrides, [], "Workspace change clears corrections with readiness")
                 eq(service.attachmentBlocked, true, "Workspace change closes same-path gate immediately")
                 eq(service.previewData, null, "Workspace change drops old data")
                 eq(service.attachmentPreview.token > savedToken, true, "Workspace identity invalidates unchanged path")
@@ -156,9 +165,11 @@ ShellRoot {
             function() {
                 service.windowActive = false
                 savedToken = service.attachmentPreview.token
+                eq(service.setPreviewColumnType(0, "text"), true, "Corrected before a restore")
                 service.applyWorkspaceSnapshot({workspace: {id: "ws-another", agent: "codex",
                     draft: "Restored review", attachment: home + "/rents.csv"}, artifacts: [], interaction: {}}, {})
                 eq(service.attachmentPreview.token > savedToken, true, "Same-id snapshot still invalidates unchanged path")
+                eq(service.previewTypeOverrides, [], "A restored snapshot starts with no corrections")
                 delay(function() {
                     eq(service.previewStatus, "idle", "Restored attachment stays lazy while hidden")
                     rejectsWithoutMutation("Hidden restored attachment")
@@ -206,6 +217,8 @@ ShellRoot {
                 service.newConversation()
                 eq(service.attachmentPreview.token > savedToken, true, "New chat invalidates preview")
                 eq(service.previewData, null, "New chat drops retained CSV")
+                eq(service.previewTypeOverrides, [], "New chat clears corrections")
+                eq(service.setPreviewColumnType(0, "text"), false, "No correction without a ready preview")
                 service.draft = "Send only after review"
                 service.attachment = home + "/rents.csv"
                 settled("ready", next)
@@ -228,7 +241,13 @@ ShellRoot {
                 eq(service.previewData.rows[0], ["Changed", "42"], "Provider choice does not change local preview")
                 service.agent = "codex"
                 var id = service.turnId
+                eq(service.setPreviewColumnType(0, "text"), true, "Corrected before the explicit send")
+                eq(service.setPreviewColumnType(1, "number"), true, "Corrected before the explicit send")
                 eq(service.submit(service.draft), true, "Explicit reviewed send succeeds into stub only")
+                eq(service.pending.columnTypes, ["text", "number"], "Corrected enum types ride the request, nothing else")
+                eq(Object.keys(service.pending).sort(), ["agent", "attachment", "columnTypes", "op", "prompt", "turnId"],
+                    "The request has only fixed keys: no preview rows or names")
+                eq(service.previewTypeOverrides, [], "A sent attachment retires its corrections")
                 eq(service.turnId, id + 1, "Explicit send creates exactly one turn")
                 eq(service.turnModel.count, 1, "Explicit send appends one model row")
                 eq(service.latest.attachment, home + "/rents.csv", "Turn retains the source attachment")
@@ -243,7 +262,92 @@ ShellRoot {
                     eq(service.busy, false, "Stub completion finishes the turn")
                     eq(service.workspaceSnapshot().interaction["turn:" + service.turnId].attachment,
                         home + "/rents.csv", "Source context persists with the sent turn")
+                    eq(JSON.stringify(service.workspaceSnapshot()).indexOf("columnTypes"), -1,
+                        "Corrections are never persisted into the workspace")
                     next()
+                })
+            },
+            function() {
+                // An uncorrected send carries no columnTypes key at all.
+                service.draft = "Second review"
+                service.attachment = home + "/rents.csv"
+                settled("ready", function() {
+                    eq(service.attachmentBlocked, false, "Second preview is ready")
+                    service.brokerStarted = false
+                    eq(service.submit(service.draft), true, "Second explicit send")
+                    eq("columnTypes" in service.pending, false, "No corrections means no columnTypes key")
+                    eq(service.pending.attachment, home + "/rents.csv", "The request still names the source")
+                    next()
+                })
+            },
+            function() {
+                // Keep full data: offered only for a ready, unregistered CSV; the
+                // copy is never started by readiness; reviewed type corrections
+                // survive it. The store is HELD in memory and the source worker
+                // is the in-memory stub: nothing here writes or sends.
+                var keep = component.createObject(check, {storeEnabled: true, stateRoot: scratch + "/keep",
+                    brokerScript: brokerScript, storeScript: brokerScript})
+                keep.csvSource.workerScript = csvStub
+                keep.storeStarting = true
+                keep.newConversation()
+                keep.storeQueue = []
+                keep.storePending = 0
+                // The service's own boot index refresh ("list") may land at any point.
+                function pruneList() { keep.storeQueue = keep.storeQueue.filter(function(job) { return job.op !== "list" }) }
+                function answer(op, result) {
+                    pruneList()
+                    eq(keep.storeQueue.length > 0 ? keep.storeQueue[0].op : "none", op, "Next store job")
+                    if (!keep.storeQueue.length) return
+                    keep.storeInFlight.push(keep.storeQueue.shift())
+                    keep.dispatch(JSON.stringify(result))
+                }
+                eq(keep.keepOffered, false, "No attachment: nothing to keep")
+                eq(keep.keepFullData(), false, "Keep is refused without a ready CSV")
+                keep.attachment = home + "/rents.csv"
+                eq(keep.keepOffered, false, "An unread CSV is not offered for keeping")
+                eq(keep.keepFullData(), false, "Keep is refused until the preview is ready")
+                keep.panelActive = true
+                until(function() { return keep.previewStatus === "ready" && !keep.attachmentPreview._occupied }, function(ok) {
+                    eq(ok, true, "Second service preview settles")
+                    eq(keep.keepOffered, true, "A ready CSV offers Keep full data")
+                    eq(keep.canKeepFullData, true, "...and it can start")
+                    eq(keep.csvSource.status, "idle", "Readiness never registers a copy")
+                    pruneList()
+                    eq(keep.storeQueue.length, 0, "Readiness queues no store work")
+                    keep.busy = true
+                    eq(keep.keepOffered && !keep.canKeepFullData, true, "Busy disables the offer without hiding it")
+                    eq(keep.keepFullData(), false, "Busy refuses the action")
+                    keep.busy = false
+                    keep.stopping = true
+                    eq(keep.canKeepFullData, false, "A stopping answer refuses the action")
+                    keep.stopping = false
+                    keep.storeEnabled = false
+                    eq(keep.keepOffered, false, "Without a store the copy could not be owned, so it is not offered")
+                    keep.storeEnabled = true
+                    eq(keep.setPreviewColumnType(1, "number"), true, "A reviewed correction")
+                    var token = keep.attachmentPreview.token
+                    eq(keep.keepFullData(), true, "The explicit action starts")
+                    eq(keep.workspaceId !== "", true, "A fresh chat gets its workspace id")
+                    eq(keep.attachmentPreview.token, token, "Giving the chat its id is not a workspace switch")
+                    eq(keep.previewTypeOverrides, ["", "number"], "The reviewed type corrections survive keeping")
+                    eq(keep.keepOffered, false, "The offer is hidden while registering")
+                    eq(keep.sourceStatus, "registering", "The source reports registering")
+                    answer("source_list", {ok: true, totalBytes: 0, count: 0, sources: []})
+                    until(function() { return keep.keepPhase === "link" }, function(linking) {
+                        eq(linking, true, "The copy registers through the stub worker")
+                        eq(keep.keepOffered, false, "Still hidden while linking")
+                        answer("save", {ok: true})
+                        answer("source_link", {ok: true})
+                        eq(keep.sourceReady, true, "The linked source is ready")
+                        eq(keep.sourceOrigin, home + "/rents.csv", "The origin is the attachment")
+                        eq(keep.keepOffered, false, "Hidden when a source is already kept for this attachment")
+                        eq(keep.turns.length, 0, "Keeping never sends")
+                        eq(keep.brokerLive, false, "Keeping never starts a provider")
+                        keep.sourceOrigin = "/elsewhere.csv"
+                        eq(keep.keepOffered, true, "Offered again for a different file (replace)")
+                        keep.destroy()
+                        next()
+                    })
                 })
             }
         ]

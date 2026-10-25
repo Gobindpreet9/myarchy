@@ -119,7 +119,60 @@ provider. Earlier service-check isolation claims relied on ineffective readonly
 overrides and are superseded by this fix. Documentation and test fixtures are
 identity-neutral; runtime state and credentials stay outside repository commits.
 
-Status: **Phase 3 underway with scoped foundations** (2026-10-05, manifest **1.21.0**): persisted native table sorting/filtering and bounded provider CSV attachment sampling are delivered. The provider sampling itself is not a type-correction UI, a full resource copy or a paged data explorer; the launcher's separate local native CSV preview is now delivered (see the 1.22.0 entry at the top) and makes no full-import claim either. Paging/UI, source persistence, type corrections, scenario controls and the typed expression runtime (including units/cycles) remain pending; neither the Phase 3 exit nor the full 100k-row dataset gate is claimed. Phase 2 evidence and all measurement limits remain below, including second display scale, instrumented CPU/wakeup attribution, decoded-pixel profiling at DPR and programmable-artifact budgets. The new isolated 100k-row **sampler-only** check does not close the full dataset gate.
+Status: **Phase 3 underway; custom UI experience is the owner's priority**
+(2026-10-23; manifest still **1.22.0**, no release/canonical sync). Task-first
+composition now promotes existing native tools ahead of supporting prose and
+uses task titles, an explicit long-explanation disclosure, wide form context
+rails and coordinated diagram/control columns. Stored block/state identities
+are unchanged. This improves existing saved answers without a schema migration.
+Comparisons now use readable matrices or a shortlist with one inspected option,
+recommendation/evidence before an explicit AI continuation action. Plans expose
+progress, the first unfinished item and navigation to its actual row. These are
+real native interactions, not generated executable layouts or a new runtime.
+Prompt guidance prioritises useful task objects and brief orientation within
+the existing budgets. Current screenshots are reproducible offscreen fixtures,
+not evidence of better real-provider selection or new live lifecycle coverage.
+
+Previous audit: **existing October 9–10 work reconciled**
+(2026-10-22; installed manifest still **1.22.0**, no new product feature built).
+Beyond the October 8 checkpoint, installed code includes editable calc data,
+named scenarios/comparison, local undo/redo, Markdown/CSV copy, local calc
+duplication, forms, actions/compare/timeline, “Ask about this”, Codex prompt
+de-duplication/timing and soft block failures. Existing table tools, CSV preview/
+type correction, kept-source paging/statistics, typed computation, workspace
+Rename/Duplicate and bounded follow-up context remain implemented. Provider
+sampling is still distinct from the full kept source.
+
+Recorded live evidence includes the 100k × 20 kept-source check and the scoped
+October 10 calc pass: keyboard table editing with hand-checked scores, undo/redo,
+two saved scenarios and their comparison, CSV copy, local duplicate-as-new-turn
+and restart restoration. This does not qualify every control: workspace
+Rename/Duplicate, forms/waiting UI, dynamic-control/focus live clicks, corrected-
+type delivery, calc provenance/numeric-input typing and mixed DPR/second scale
+remain open. The October 10 missing compare-block body/stale-QML observation is
+unresolved. See `AGENTS.md` and §5.1 for exact scope and known gaps.
+
+That audit's scratch/offscreen verification passed **624 Python tests (2 skipped),
+1,710 main QtTests, 28 blocks / 23 visual / 12 answer**, plus all eight isolated
+checks listed in README. The main total includes eight new strict-equality
+helper checks. Only test helpers, fixtures/assertions and docs changed during
+this resume; no real provider or live user state was used. Existing
+`ResourceWarning`s remain. Final logs are under
+`/tmp/opencode/launcher-status-20261022-6ts2myhe/` (`*-final.log`, `visual.log`,
+`answer.log`, `<Checkname>.log`). Canonical `~/Work/myarchy` is clean at
+launcher commit `0a4ba8e` (October 6); the initial audit found 94 installed files
+different/new before the new test-helper files. No sync, release, commit or push
+was performed.
+
+Next: keep building and evaluating useful custom UI compositions, including
+actual provider selection and end-to-end interaction quality. Persistence-refusal
+notices, calculator-scenario reveal/paging and CSV/Markdown parity remain a
+secondary backlog, not the owner's primary goal. Full state-aware AI revisions
+(targeted artifact patches), full conversation branching and the programmable
+runtime are not built. No Phase 3 exit or full dataset/resource qualification is
+claimed; instrumented CPU/wakeup attribution, decoded-pixel profiling and the
+other recorded resource/live gates remain outstanding. Earlier dated checkpoint
+paragraphs retain their historical qualification limits.
 
 Prior delivery: Phase 1 delivered `ai:` entry, Ask AI discovery, the multiline composer, the versioned workspace store with restart restoration, artifacts/revisions, saved-workspace search, the Peek/Explore cards, and the detached window. Phase 2 added the learning-loop vocabulary (steps/check/predict), the native diagram scene, bounded local computation (slider + formula readouts), slider-to-diagram coupling, and multi-image exploration (gallery blocks, up-to-three image candidates with local Show-another, an enlarged viewer). Gallery output has live verification; the actual enlarged viewer is now live-verified after geometry refinement. Plain-image Show another has unit coverage only, with no recorded live verification. Medium selection is now automatic and subject-driven: the plain question "Help me recognise Gothic, Romanesque and Renaissance architecture" produced a resolved three-item gallery with no format hints, and the seasons question produced a coupled diagram+slider. Contextual model suggestions render as composer-filling chips. Adaptive explanation depth landed (manifest 1.17.0, extended in 1.17.1/1.17.2): the latest answer with a learning block offers **Simpler** / **More depth** / **Another example** prose sidecars that leave the blocks and their state untouched, and a stale resumed provider session — depth explains included — now falls back to a fresh session once instead of hard-failing follow-ups. Seasons flagship acceptance run (manifest 1.17.3): through the real entry flow, the seasons question produced a 7-part orbit diagram plus a month slider with two diagram links and an honest note; **Simpler** persisted a prose sidecar on the same turn; the transfer follow-up ("If it is summer in Australia right now, roughly what month is it, and why?") answered correctly from the tilt concept (October is not Australian summer; it runs roughly December–February when the Southern Hemisphere tilts toward the Sun); and a full shell restart restored the two-turn conversation with its workspace, blocks and explanation intact. That run exposed and fixed a real save-gating bug: after **New chat**, `restoreSettled` stayed false and suppressed every autosave until close (`AiServiceCheck` now asserts a fresh conversation is immediately persistable). Phase 2 exit evidence was recorded under manifest 1.19.3 with the limits below; refinement and outstanding measurements remain.
 
@@ -146,7 +199,7 @@ Verification (2026-10-05, manifest **1.21.0**): 107 main QtTests, 15 blocks, 23 
 
 Live foundation check: the corrected eight-row synthetic `~/rents-sample.csv` was submitted and all eight native table rows compared unchanged to the fixture. Concurrent `submitfile` returned `busy`, leaving the empty draft/attachment untouched. Rent-header Tab + Return sorted ascending; filter `o` typed with real `wtype` yielded Porto 600, Lisbon 900, Oslo 1200, **3 of 8 rows** and **Sorted · Filtered**. Full restart visually restored the same rows/count/arrow/filter/trail. Workspace `ws-52ce449a43c89ab5`, turn 92, persisted `{"92":{"table:0":{"dir":1,"filter":"o","sort":1}}}`. Screenshots `/tmp/opencode/csv-live-table.png`, `/tmp/opencode/csv-live-filtered.png`, `/tmp/opencode/csv-live-restored.png` were read and visually inspected, unlike earlier captures.
 
-Isolated **sampling-only** stress: 100,000 numeric rows × 20 columns, 14,989,091 source bytes; snapshot took 0.202 s and returned 140 prefix rows in 22,157 serialized JSON bytes, `totalRows: null`. Peak process RSS was 82,020 KiB and includes the full Python process plus fixture generation, **not** incremental memory, PSS or native UI responsiveness. Record: `/tmp/opencode/csv-sampling-stress.json`. This does not satisfy the full 100k-row dataset stress exit. All prior Phase 2 measurement limits still apply; paging/UI, full source persistence, type corrections and typed units/cycles runtime remain pending.
+Isolated **sampling-only** stress: 100,000 numeric rows × 20 columns, 14,989,091 source bytes; snapshot took 0.202 s and returned 140 prefix rows in 22,157 serialized JSON bytes, `totalRows: null`. Peak process RSS was 82,020 KiB and includes the full Python process plus fixture generation, **not** incremental memory, PSS or native UI responsiveness. Record: `/tmp/opencode/csv-sampling-stress.json`. This does not satisfy the full 100k-row dataset stress exit. Later kept-source paging/persistence, preview type correction and typed units/cycles checks supersede the implementation gaps at this sampling checkpoint, not its measurement limits; full resource qualification and the narrower live gaps in the current Phase 3 slice remain outstanding.
 
 Exploration trail (manifest 1.18.1): every answer now carries a compact trail line derived only from persisted interaction state (`AiState.trailSummary`): "Checked" / "Predicted" / "Stepped through" / "Scrubbed" / "N examples replaced" / "Depth added", joined with " · " and shown silently when there is nothing to report. An attempted selection counts as exploration and shrinking it back to empty removes the entry; predictions count only once committed (the stored index); being on the first stage of a stepper is not "stepped through". Unit-tested key by key (unknown keys never invent entries) and rendered under each turn in `AiPane` (`aiTrail`); because the trail is pure state it restores with the workspace.
 
@@ -230,6 +283,59 @@ These are proposed release targets, not current measurements.
 - **Saved does not mean resident.** Persist state on disk, restore views on demand, and release heavyweight objects when they are no longer useful.
 - **Pay for active capability only.** A simple launcher search must not initialise the AI backend, decode old answer images, or start a browser engine.
 
+### 1.1 Market context: ChatGPT "Intelligent UI" (2026-10-07)
+
+On 2026-10-07 OpenAI shipped GPT-6 in ChatGPT with **Intelligent UI**: answers composed of text,
+graphics, tappable buttons, forms, charts, diagrams, maps, checklists and multiple-choice follow-ups,
+plus small on-demand tools (calculators, bill splitters, recipe scaling, small games). The disclosed
+mechanism is the same shape as this plan's: a library of native, streamable components and a
+compiler that renders the interface while the model is still generating, so the answer appears
+progressively and the model can "start answering while it continues to think". OpenAI's own
+acknowledged weakness is design judgment and the range of experiences it can create. The public
+coverage does not describe saving, editing, or reusing a generated tool, nor how interaction feeds
+back to the model. Sources: the announcement page (blocked to automated fetch) and press coverage
+(TestingCatalog, MacRumors, 2026-10-07).
+
+What this changes for us (decision record, not a pivot):
+
+- **Confirmed**: the declarative, bounded, native-component approach (section 3.4 level 1, section
+  4.4) is the industry's chosen shape; do not drift toward arbitrary generated code for ordinary
+  answers. The programmable runtime stays the Phase 4 escape hatch.
+- **Where we are ahead or different**: local-first and private (state on disk, no account); the
+  interface is a *workspace*, not a transcript fragment: edits, scenarios, undo, exports, duplicates
+  and a durable 100k-row CSV source persist across restarts; every computed number has verifiable
+  provenance and a golden-tested local engine; provider-agnostic; keyboard-first on the desktop.
+- **Where we are behind**: (G1) **progressive rendering**: the launcher waits for the complete
+  structured answer, then renders. MEASURED 2026-10-09 (3 real requests, broker-identical argv):
+  Codex 0.160.0 `exec --json` delivers the whole structured answer as ONE `item.completed`
+  agent_message at the end (no `item.updated` or partial agent_message events; first answer byte equals
+  completion: 4.5 s for a greeting, about 11 s for a calc or gallery answer, all model time), so
+  progressive block rendering is impossible with Codex as invoked; Hermes `stream-json` emits text
+  deltas (token-chunk granularity, by code reading; not timed live); no progressive block compiler
+  is built yet. (G2) **forms and actions**: the original catalogue gap now has bounded `form`
+  and `actions` blocks whose explicit submissions become structured follow-ups. General form-
+  to-local-calc binding and live form/action interaction qualification remain open. (G3)
+  **maps and route/place visuals**. (G4)
+  **design judgment** at scale: medium selection is benchmarked (33 prompts) but there is no
+  visual-quality evaluation. (G5) **speed to first useful pixel**: first answer text and the
+  skeleton of the interface should appear before the model finishes.
+- **Roadmap effect**: promote G1 and G2 into Phase 3 (they extend the same block catalogue and
+  state model), schedule G3 with the Phase 4 media providers, treat G4 as part of the Phase 5
+  evaluation, and keep G5 as the acceptance metric for G1 (time to first block, p50/p95).
+- **Progress through 2026-10-10; audited 2026-10-22**: G2 forms/actions and the G5 groundwork
+  (honest phase + elapsed counter,
+  per-turn timing metrics, Codex prompt de-duplication saving about 5.4k input tokens per
+  request, per-block validation shared with any future stream) are built and offscreen-verified;
+  comparison and timeline blocks plus selected-part follow-up context are also implemented.
+  Small live model-output checks exercised action/timeline/comparison selection, not the full
+  control/focus paths; the compare-body/stale-QML issue remains unresolved. Forms/waiting UI
+  still lack live qualification. G1 for Hermes (a stream compiler) is designed, not built;
+  G3 (maps) and G4 (visual-quality evaluation) are not started. Current prompt guards are
+  13,000 / 15,000 / 26,000 bytes (Codex / Hermes / full), with a 13,500-byte output-schema
+  guard; the conversation budget is 192 KiB, distinct from the 64 KiB text-attachment cap.
+- **Non-goals**: matching ChatGPT's breadth of games and bespoke experiences before the isolated
+  programmable runtime is qualified; cloud accounts; sharing generated tools.
+
 ## 2. User Experience & Functionality
 
 ### 2.1 Users and jobs
@@ -294,6 +400,15 @@ Acceptance:
 - Opening and closing the quick launcher never resets a detached workspace.
 
 ### 2.4 Workspace composition and visual identity
+
+Task-first native composition landed on 2026-10-23. The renderer identifies the
+primary task from supported blocks, retains original indices, keeps linked
+diagram/slider state coherent across columns and places support/sources after
+the working object. Narrow decisions show a shortlist rather than a stack of
+full detail cards; plans expose the next unfinished step. Width/text-view changes
+do not recreate the tool. `AiTaskVisualCheck` supplies inspected illustrative
+fixtures at three widths and three palettes; live/provider-quality qualification
+and richer model-authored composition remain separate goals.
 
 The first viewport should show the user's subject, a useful answer, and the main interactive object. Use a conversation rail when needed rather than forcing the object below an accumulating chat transcript.
 
@@ -506,7 +621,8 @@ Deferred beyond that release: multi-user collaboration, cloud account/sync, publ
 
 ### 3.1 The current baseline
 
-Findings updated from source inspection of the partial implementation, not a new live verification or resource profile:
+Findings reconciled with the installed implementation on 2026-10-22, not a new
+live verification or resource profile:
 
 | Area | Current implementation | Planned evolution |
 | --- | --- | --- |
@@ -514,12 +630,12 @@ Findings updated from source inspection of the partial implementation, not a new
 | Presentation | `answer` plus at most six flat blocks | Versioned presentation tree with stable identity |
 | Composition | Title/summary, first image as hero, remaining blocks | Task-selected layouts and persistent artifacts |
 | Images | Wikimedia single images and captioned galleries; local candidates and fitted zoom/pan viewer | Richer role-driven retrieval, annotations, generated illustrations |
-| Controls | Checklists, chart inspection and adaptive explanation depth (prose Simpler/More depth/Another example sidecars) | Stateful inputs, simulations, checks, filtering, revision actions |
-| State context | Checklist values retained in service, absent from submit payload; depth requests send a bounded latest-block context (diagram selection, slider value, steps index) | Explicit interaction snapshot supplied to the agent |
-| Suggestions | Stored on turns, not displayed by `AiPane.qml` | Contextual action model |
+| Controls | Learning blocks, local table sort/filter, typed calc inputs/editable data/scenarios/undo, forms, action buttons, comparison and timeline blocks, adaptive prose depth sidecars | General state transitions, plan editing and targeted revision actions |
+| State context | Ordinary submits carry bounded latest-answer/calc context; explicit form/choice/focus payloads extend it; depth uses separate bounded context | Broader interaction snapshots and revision-aware artifact patches |
+| Suggestions | Contextual chips fill the composer without sending; selected-part targets accompany the next explicit question | Broader contextual action model |
 | Lifecycle | Lazy restore implemented (metadata-only boot; hydrate once on real AI entry); one lazy `--serve` store worker per session (one connection across a burst, strictly ordered results, idle/EOF exit); coalesced dirty-field saves (workspace row on every save, full content only when a content change raised `dirtyContent`) | Remaining lifecycle refactors |
 | Agents | Codex with hosted web lookup; Hermes without tools | Explicit adapter capability negotiation |
-| Window | Bounded launcher panel | Connected overlay and normal workspace surfaces |
+| Window | Connected Peek/Explore panel and detached normal workspace window | Remaining lifecycle, focus and multi-scale qualification |
 
 ### 3.2 Response planning and presentation contracts
 
@@ -554,6 +670,125 @@ Each semantic request includes the selected object, current relevant inputs, rec
 
 ### 3.4 Three levels of generated UI
 
+**Owner integration constraint (2026-10-24):** intelligent UI is part of the
+existing native launcher, NOT a separate app/manual-preview workflow. Preserve
+the native composer, submission/Stop, turns, workspace identities and save
+ownership. Only the answer/tool region changes. The standalone page is an
+internal development harness and must not be presented as delivered integration.
+
+`launcher/embedded.tsx` in the fork now extracts only the OpenUI renderer/library,
+with a bounded versioned snapshot/state/copy/height/Escape interface and no second
+composer, provider, history or store. Its mocked Qt-host browser test brings the
+browser total to nine and checks local state round-trip/no save-echo reset/no
+HTTP API calls. The native host and save-acknowledgement lifecycle are NOT built.
+
+Native-host qualification found a separate blocker: loading `WebEngineView`
+in a scratch-only Quickshell config crashed with `Argument list is empty ...
+QCoreApplication`. Log:
+`/tmp/opencode/native-openui-engine-28145hly/check.log`. The live shell was not
+used. Installed Quickshell's startup lacks Qt WebEngine Quick's documented early
+initialization, and the exact fatal is its hard-coded Qt `argc = 0`, confirmed in
+matching `launch.cpp`. No supported CLI/pragma workaround was found. Do not
+hot-load the browser into the actual launcher or change the shell binary/startup
+without separate owner approval. Evaluate
+safe host support or a native QML adapter over the framework-independent OpenUI
+core. The standalone browser's cost is NOT an embedded-runtime measurement.
+
+Planned native contract: one `openui` block (`title`, bounded `code`) alongside
+fallback prose in the existing answer envelope; same artifacts/interaction store,
+`uiStates[turnId]["openui:<originalBlockIndex>"]`, existing composer and providers.
+Keep native `calc` validation unchanged. Rich guidance needs its own measured
+budget/profile, not a raw-program prompt accidentally combined with the native
+JSON schema. Code must validate against the actual restricted library before
+every mount, including restored answers. Mount/workspace/turn/block identities,
+acknowledged state flush on transition/close, text fallback and opaque-state
+duplication all need regressions before enabling the path. This is a plan, not
+completed native plumbing.
+
+**Decision and working prototype (2026-10-24):** the owner authorised proceeding
+after the comparison. Use [OpenUI core](https://github.com/thesysdev/openui)
+(`lang-core` + `react-lang`) as the framework and reuse the Thesys demo's
+components/functions. CopilotKit's reviewed app
+(`8391a94c1c3939c679e40ddd7bfc08a9ef690e70`) remains a free-form HTML/canvas/3D
+reference, not the first integration: its current app also requires a Jev
+presentation router plus the answer model and a larger backend stack. This is
+an integration-fit decision, not an independent visual-quality/latency benchmark.
+OpenUI's main repository (reviewed `9d73d17d2bbac565672a85e78f6eb7740cb0d9ca`)
+is the underlying framework, not a third competing demo. Its maintained
+FastAPI/design-system/native examples do not remove the QML integration work.
+
+Prototype: `~/Work/launcher-openui/launcher/`, based on Thesys demo
+`03213439358bf3408ad61a46ec9e3230c5572e48`, npm-locked core/runtime **1.0.0**.
+Static esbuild assets, actual upstream renderer/components/functions, bounded
+local state and a matching 31,442-byte system prompt; no Next.js server, Cloud
+account or new keys. Stdlib loopback server reuses the audited Codex isolation
+helpers with native JSON instructions/schema deliberately replaced. Browser
+never receives credentials or provider/host execution tools. Exclude arbitrary
+HTML, network media/maps, Query/Mutation and telemetry; CSP blocks remote loads.
+An explicit Chromium app owns a temporary profile and one desktop lock; nothing
+starts in ordinary launcher/AI use. Desktop behavior is not live-qualified.
+
+Reuse `ai_workspace_store.py`'s private transactional implementation under a
+SEPARATE `<launcher-state>/rich/workspace.db`, never the native DB. Save complete
+program/state with optimistic revision checks, serialised/coalesced writes,
+visible failures and a flush barrier before navigation. An older acknowledgement
+must not label newer debounced edits saved or rehydrate the controls. New AI
+revisions retain the previous tool. No retention/pruning/deletion. The native
+validated calculation engine remains authoritative for its supported use cases;
+generic OpenUI math does not inherit that validation/provenance guarantee.
+
+Checks: **336 Vitest, 30 Python backend, 8 Playwright**, types/static build. Browser
+checks use real SQLite in scratch state, local controls/keyboard/reload at
+420/1280px, failed/delayed saves, invalid output and cancellation. Three synthetic
+real Codex generations (meal scaler, garden plan, bicycle gearing) all parsed;
+~15/28/30 seconds, one sample each. Exact outputs replayed through the UI passed
+local interactions, with no page errors/external browser requests. Not a broad
+provider-quality or source/claim verification benchmark. No user workspace writes.
+Review subagents hit quota, so independent review remains outstanding.
+
+**Do not switch the native renderer yet:** a headless reference measured
+435–437 MiB aggregate PSS (browser/GPU subprocesses + Python, ten processes),
+above the 256 MiB optional-runtime allowance. GPU-off variants were no better;
+cleanup left zero owned processes. 51ms server readiness / 411ms first useful
+fixture and 1.5% one-core CPU over four early seconds are short headless
+observations, NOT settled CPU/Wayland/DPR or 50-cycle qualification. Reports:
+`/tmp/opencode/openui-resource-ht7cE4/report.json` and
+`/tmp/opencode/openui-renderer-cost-b2Nm74/report.json`. Generated-output replay
+screenshots/report: `/tmp/opencode/openui-generated-ui-q9a0vj/`; real programs
+under `/tmp/opencode/openui-live-mh4yxqpr/` and `openui-live-qbw6addk/`.
+These scratch artifacts are ephemeral. Pursue a lighter isolated host before
+shipping integration; Qt WebEngine Quick development libs are installed, CMake
+is absent. No native deletion, installed-renderer change, shortcut, release,
+version bump, canonical sync, commit or push. The native fallback stays intact.
+
+**Reuse candidate supplied by the owner (2026-10-23):**
+[Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) and
+[OpenUI](https://github.com/thesysdev/openui) are MIT-licensed. Source review
+confirmed model-authored layout trees, shared reactive variables, local actions,
+a streaming parser/runtime, component-library-driven prompts and worked tools.
+This is a stronger composition foundation than adding more fixed blocks.
+The ready-made components are React/web, not drop-in QML; `lang-core` is
+framework-agnostic but a native renderer/bridge would still require porting work.
+
+Recommended evaluation, not an approved migration: reuse their actual renderer
+and component/function library in an isolated, explicitly opened rich workspace,
+preserving the native launcher, existing provider adapters and durable SQLite
+workspaces. Compare a meal scaler, a linked travel plan and an interactive
+learning tool against the current native path, including state restore, keyboard
+access, first useful rendering, memory and complete idle unloading. A static
+browser bundle exists, so the whole Next.js chat/server need not become our base.
+Cloud is optional: upstream also supports direct compatible APIs and Ollama;
+Cloud-only output correction must not be assumed on those paths. Our Codex CLI
+does not become progressively streaming merely by changing renderers.
+
+Keep arbitrary `HtmlView` scripts, demo telemetry, unrestricted external asset
+fetching and broad host/tool bridges disabled for an initial spike. Preserve
+license notices and independently review dependency/runtime limits, provenance
+and numerical behavior before adoption. No packages were installed, upstream
+code imported, provider calls made or renderer swapped during this source review;
+upstream gallery programs are hand-written examples, not proof of live model
+quality. The browser lifecycle/resource gates below still apply.
+
 **Level 1: composed native interfaces**
 
 The model composes a curated library of native primitives: text, layouts, images, hotspots, comparisons, diagrams, timelines, forms, charts, quizzes, and controls. This supports a broad range of custom interfaces with consistent appearance and keyboard behavior.
@@ -583,12 +818,12 @@ Levels 1 and 2 should cover normal requests efficiently; Level 3 supplies the lo
 | Current information | Codex hosted web search | Source-linked extraction and adapter-aware availability |
 | Photos and reference images | Wikipedia/Wikimedia resolver | Multi-candidate retrieval, relevance selection, alternative views |
 | Generated illustration | None | Provider adapter, asynchronous jobs, labelled outputs, cached results |
-| Diagrams | No dedicated diagram type | Native scene primitives with semantic labels and interaction |
+| Diagrams | Native scene primitives, selectable labels and slider coupling | Richer semantic scenes and grounded image hotspots |
 | Charts and market data | Existing chart/market resolver | Direct controls, tabular alternative, dataset bindings |
 | Files | One bounded text attachment | Attachment collection, CSV first, then PDF/image ingestion with adapter capability checks |
-| CSV sampling | Bounded provider prefix snapshot (1.21.0), with separate clipping disclosure and readable parse errors | Native preview/type correction, durable full source data and paged explorer |
+| CSV sampling/data | Bounded provider prefix snapshot, local preview/type correction, durable kept source, paged explorer and exact supported statistics | Remaining delivery/resource qualification and broader dataset bindings |
 | Geographic exploration | None | Map renderer/data provider selection during its milestone |
-| Tool execution | Local native UI only | Typed local computation, later isolated programmable runtime |
+| Tool execution | Bounded native typed computation, editable data, scenarios and local undo | Revision reconciliation and isolated programmable runtime |
 
 A provider-specific feature must be discoverable through capabilities; do not silently imply that an adapter supports image understanding, structured updates, or web lookup when it does not. Keep existing agent sessions pinned, and provide an explicit path when a requested capability needs another adapter.
 
@@ -908,13 +1143,126 @@ Exit: both flagship experiences satisfy their interaction, factual, keyboard, vi
 
 ### Phase 3 — Declarative mini-apps and data
 
-Current slice (1.21.0; the local native CSV preview landed separately in
-**1.22.0**): native table sorting/filtering and saved arrangement,
-plus bounded CSV provider-context sampling, are delivered and live-verified
-with eight synthetic rows. The isolated 100k-row check measures sampling only,
-not the full dataset exit. Remaining: type correction,
-durable source resources/paging, editable data/scenarios, typed computation
-(units/cycles), and the other deliverables below.
+Current slice (audited 2026-10-22; October 9–10 additions remain unreleased,
+manifest still 1.22.0): native
+table sorting/filtering and saved arrangement plus bounded CSV provider-context
+sampling are delivered and live-verified. The earlier isolated 100k-row sampler
+check is not full dataset qualification. Preview column inference/correction and
+bounded corrected-type transport are implemented, with a live correction check
+on 2026-10-07; sending a corrected type to the model remains unverified live.
+Durable CSV source + paged explorer + exact whole-file statistics are delivered:
+a live 100k × 20 source exercised sort/filter/page, restart restoration, median
+refusal and true sum/mean. The typed calculation runtime (units, dependency graph,
+error values, provenance; independent Python/JS engines checked against one
+322-case golden table and a 1,794-row differential fuzz) and model-authored `calc`
+renderer are implemented. Live on 2026-10-08, three weight sliders, typed fields,
+basis badges and computed outputs rendered; End changed a slider to hand-checked
+scores and the adjustment survived a shell restart. Provenance disclosure,
+typing into the numeric input field, mouse paths, narrow peek fit and mixed DPR
+remain unqualified live; see `AGENTS.md` for the recorded evidence. Editable
+table cells, up to three saved input scenarios with a compare view, local
+undo/redo, Markdown/CSV copy and Duplicate-as-new-turn were implemented on October
+9. The scoped October 10 live pass used a real Codex three-laptop block: keyboard
+grid editing changed a price 1200 → 1000 and its score 54.44 → 57.78 (hand-checked),
+Ctrl+Z/Y restored/reapplied it, two scenarios saved and compared, CSV copy and
+local duplication worked, and a shell restart restored edits/scenarios/copy.
+That is not a complete live pass of all scenario, row-edit or pointer controls.
+
+Read-only inspection on October 22 confirms the October 10 gaps remain:
+`AiCalcScenarios` opens its comparison Loader without reveal/focus, and the pane
+has no PageDown handling. The CSV scenario section includes differing inputs and
+scalar cells but omits the table-formula rows shown on screen; `AiState`'s
+Markdown comparison also omits differing scenario inputs. The 200 KiB whole-map
+saved-edit guard raises `stateNotice`, but no UI renders it. Secondary backlog: a visible
+persistence-refusal notice, then comparison reveal/paging and export parity.
+
+Dynamic UI additions (October 9–10): bounded forms and actions submit structured
+follow-ups; comparison options can be pinned/hidden locally; authored-order
+timelines keep completion state; “Ask about this” attaches a bounded selected-part
+target to the next explicit question. Codex prompt de-duplication, phase/elapsed
+feedback and content-free timing metrics are implemented, as are per-block soft
+failures (invalid blocks drop with a generic warning; malformed envelopes/output
+still fall back as a whole). Small live model-output checks are not live control
+qualification: forms/waiting UI and dynamic-control/focus clicks remain pending,
+and the missing live compare-block body/stale-QML issue is unresolved. Hermes's
+progressive block compiler remains designed, not built; Codex still delivers the
+whole structured answer at completion.
+
+Reusable-tools addition: **More → Rename… / Duplicate…** offers themed keyboard
+dialogs for trimmed plain single-line names (non-empty, ≤96 UTF-16 units).
+`interaction.workspaceName` persists the title override through draft/full saves
+and restoration, feeding detached-window titles and launcher search without
+changing answer headings. Duplication creates independent workspace/artifact
+identities with remapped references and one new parentless revision checkpoint
+per artifact, retaining turns, checklists, UI state, adjusted calc inputs, draft
+and attachment, not the original revision history. The original stays saved with
+its provider session/home; the duplicate has blank provider session/handoff.
+Kept CSV resources and registry ownership stay solely with the original, while
+cached image references remain unchanged. This is not full AI conversation
+branching: the first future provider prompt does not reconstruct copied history.
+Save acknowledgements gate the backend mutation and, after cloning, the original's
+edits made during the action before switching to the copy. Busy/stopping, load,
+keep and pending-action gates apply; no prune is performed.
+The final hydration briefly freezes outgoing controls. A failed open keeps the
+original's session/handoff/source ownership, and a lost rename acknowledgement
+replays its requested name rather than undoing it. Forms are tied to workspace
+identity; named empty copies retain management controls.
+
+State-aware follow-up context (2026-10-08, unreleased): every ordinary explicit
+submit captures `AiState.workspaceContext` before appending the new turn — the
+latest completed turn (prompt ≤512 / answer ≤1024 UTF-16 units) plus the most
+recent completed `calc` block within the 20-turn window, even when older than
+that turn, so a prose follow-up still sees the open calculator. The snapshot is
+one ≤8 KiB UTF-8 JSON: ≤12 inputs, ≤12 outputs and ≤4 tables × ≤6 columns ×
+≤6 rows with ≤12 table cells total. `AiCalcView.js` is the shared build/restore
+adapter for the renderer and the snapshot, so saved input state validates
+exactly as the tool renders it (invalid range/unit resets to the authored
+default, never clamps), numeric values come from the typed engine with honest
+error/boolean cells, and partial displays, formulas or units are withheld under
+`unavailable`/`truncated` flags rather than sent. The broker validates the
+closed schema before any file read, session adoption or task creation, appends
+the snapshot once as fixed untrusted-data guidance, and charges its bytes once
+against the conversation budget (192 KiB since October 9, superseding the
+original 64 KiB limit); stale-resume retries assemble an identical prompt.
+The snapshot is context, not capability: no transcript, provider-session
+reconstruction, source IDs, file paths or new tool access; local edits still
+make no model call; a follow-up appends a new answer and never rewrites the
+original blocks; a truncated snapshot cannot justify whole-table aggregates,
+overall rankings or dropped metadata; depth sidecars never carry it. General
+artifact revision and full conversation branching remain undelivered.
+
+Historical October 8 slice verification passed 418 Python tests (two skipped; existing
+`ResourceWarning`s), 1,077 main QtTests, isolated service + real-store checks in scratch
+HOMEs, and the detached-window check. Wide Rename / narrow Duplicate form
+screenshots were read and manually inspected on mock/offscreen surfaces, NOT
+live. Independent review findings received regression fixes; live action qualification remains pending. The
+follow-up-context slice then passed 437 Python tests (two skipped; existing
+`ResourceWarning`s; `WorkerTests` now mocks `refresh_codex_auth` so protocol
+tests can never copy the real `~/.codex/auth.json`), 1,113 main QtTests,
+26 blocks / 23 visual / 12 answer, isolated service/store/detached checks and
+the new `AiWorkspaceContextCheck` (real service → real broker → stub provider
+in scratch HOMEs), all offscreen with no live provider call. No
+version bump, release or canonical-repository sync is implied. The October 22
+scratch/offscreen rerun passed 624 Python tests (2 skipped), 1,710 main QtTests,
+28 blocks / 23 visual / 12 answer and all eight isolated checks listed in README.
+The main total includes eight new `tests/TestJson.js` helper checks. Repaired
+assertions use strict recursive leaf equality, ignoring only object key order,
+not QtTest's numeric-tolerant object comparison (a 1e-6 difference is explicitly
+rejected). The isolated fake Codex fixture was repaired too; no product changes
+or new live qualification are implied.
+
+Remaining: visible persistence-refusal feedback; scenario comparison reveal/
+paging and export parity; plan editing beyond timeline completion; completed
+laptop-decision flagship/provenance qualification; revision reconciliation and
+conflict handling; general workspace export/bundle/history beyond calc copy and
+view-local undo; full state-aware AI revisions (targeted artifact patches) beyond
+bounded follow-up context, and full conversation branching. Live workspace
+Rename/Duplicate, forms/actions/focus, bounded-snapshot provider quality,
+corrected-type delivery, the compare-body issue, source disk-full/crash-mid-rename,
+peek worst case, mixed DPR/second scale and full dataset/resource gates remain
+outstanding. Editable calc data, named
+scenarios, local undo, calc exports, source paging and typed computation are not
+missing implementations. Phase 3 has not met its exit.
 
 Deliverables:
 

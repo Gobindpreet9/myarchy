@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 
 // Round-trip check: the retained service persists a conversation through the
 // real ai_workspace_store.py CLI and restores it into a fresh service
@@ -58,7 +59,7 @@ ShellRoot {
             Qt.exit(1)
             return
         }
-        console.log("AiWorkspaceStore: save, load, artifact, interrupted-turn and new-chat checks passed")
+        console.log("AiWorkspaceStore: save, load, artifact, interrupted-turn, rename, duplicate, new-chat and source-registry checks passed")
         Qt.quit()
     }
 
@@ -79,9 +80,88 @@ ShellRoot {
                     return entry && String(entry.id) === finalId
                 })
                 if (!present) failures.push("new chat must keep the finished workspace saved")
-                finish()
+                else sourcesPhase(finalId)
+                if (!present) finish()
             })
         })
+    }
+
+    // Phase 4: the source registry through the real worker. Deleting the
+    // workspace must drop its rows and remove only its copied directory.
+    property string sourceId: "src-0123456789abcdef"
+    function storeCli(op, body, done) {
+        shell.done = done
+        shell.command = ["sh", "-c", "printf '%s' \"$1\" | python3 \"$2\" --root \"$3\" " + op
+            + "; test -e \"$3/sources/" + sourceId + "/data.csv\" && echo present || echo gone",
+            "sh", JSON.stringify(body), saved.storeScript, saved.stateRoot]
+        shell.running = true
+    }
+
+    // A replaced copy is unlinked THROUGH THE SERVICE QUEUE with removeDir:
+    // the row and only that directory go; the first source is untouched.
+    property string replacedId: "src-fedcba9876543210"
+    function unlinkPhase(workspaceId, done) {
+        var replaced = saved.stateRoot + "/sources/" + replacedId + "/data.csv"
+        shell.done = function() {
+            saved.storeRun("source_link", {workspaceId: workspaceId, sourceId: replacedId, bytes: 7, rows: 1})
+            saved.storeRun("source_unlink", {sourceId: replacedId, removeDir: true})
+            pollUntil(function() { return !saved.storeBusy }, function() {
+                shell.done = function(text) {
+                    eq(text.trim().split("\n"), ["gone", "present"],
+                        "unlink removeDir removed only the replaced copy")
+                    storeCli("source_list", {}, function(listed) {
+                        eq(JSON.parse(listed.trim().split("\n")[0]).count, 1, "the replaced row is gone, the kept row stays")
+                        done()
+                    })
+                }
+                shell.command = ["sh", "-c", "for f in \"$1\" \"$2/data.csv\"; do test -e \"$f\" && echo present || echo gone; done",
+                    "sh", replaced, saved.stateRoot + "/sources/" + sourceId]
+                shell.running = true
+            })
+        }
+        shell.command = ["sh", "-c", "mkdir -p \"$(dirname \"$1\")\" && echo x > \"$1\"", "sh", replaced]
+        shell.running = true
+    }
+
+    function sourcesPhase(workspaceId) {
+        var dir = saved.stateRoot + "/sources/" + sourceId
+        shell.done = function() {
+            saved.storeRun("source_link", {workspaceId: workspaceId, sourceId: sourceId, bytes: 5, rows: 1})
+            pollUntil(function() { return !saved.storeBusy }, function() {
+                storeCli("source_list", {}, function(text) {
+                    var lines = text.trim().split("\n")
+                    var listing = JSON.parse(lines[0])
+                    eq(listing.count, 1, "the worker registered the source")
+                    eq(listing.totalBytes, 5, "the registry reports its total bytes")
+                    eq(lines[1], "present", "the copied directory exists before the delete")
+                    unlinkPhase(workspaceId, function() {
+                    saved.storeRun("delete", {workspaceId: workspaceId})
+                    pollUntil(function() { return !saved.storeBusy }, function() {
+                        storeCli("source_list", {}, function(after) {
+                            var rest = after.trim().split("\n")
+                            eq(JSON.parse(rest[0]).count, 0, "workspace delete cascades the source row")
+                            eq(rest[1], "gone", "workspace delete removes the copied directory")
+                            finish()
+                        })
+                    })
+                    })
+                })
+            })
+        }
+        shell.command = ["sh", "-c", "mkdir -p \"$1\" && echo x > \"$1/data.csv\"", "sh", dir]
+        shell.running = true
+    }
+
+    Process {
+        id: shell
+        property var done: null
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var callback = shell.done
+                shell.done = null
+                if (callback) callback(text)
+            }
+        }
     }
 
     function onceVerified() {
@@ -113,7 +193,54 @@ ShellRoot {
         // fallback path for workspaces saved before the artifact split.
         check.verifyFallback()
         for (var f = 0; f < check.fallbackFailures.length; ++f) check.failures.push(check.fallbackFailures[f])
-        check.newChatPhase()
+        check.reusableToolsPhase()
+    }
+
+    function reusableToolsPhase() {
+        restored.storeEnabled = true
+        restored.sessionId = "original-session"
+        restored.handoffHome = restored.stateRoot + "/codex-fixture"
+        restored.setUiState(3, "calc:0", {weight: {v: 8, u: ""}})
+        eq(restored.renameWorkspace("Laptop decision tool"), true, "rename accepted")
+        pollUntil(function() { return !restored.workspaceActionPending && !restored.storeBusy }, function(ok) {
+            if (!ok) { failures.push("rename did not settle"); finish(); return }
+            eq(restored.workspaceDisplayTitle, "Laptop decision tool", "explicit name applied")
+            restored.dirtyContent = false
+            restored.draft = "Named tool draft"
+            restored.storeRun("save", restored.savePayload())
+            pollUntil(function() { return !restored.storeBusy }, function(savedOk) {
+                if (!savedOk) { failures.push("named thin save did not settle"); finish(); return }
+                eq(restored.duplicateWorkspace("Laptop decision variant"), true, "duplicate accepted")
+                pollUntil(function() { return !restored.workspaceActionPending && !restored.loadingLatest
+                    && restored.workspaceId !== "ws-check0001" && !restored.storeBusy }, function(cloned) {
+                    if (!cloned) { failures.push("duplicate did not open"); finish(); return }
+                    var copyId = restored.workspaceId
+                    eq(restored.workspaceDisplayTitle, "Laptop decision variant", "copy name restored")
+                    eq(restored.draft, "Named tool draft", "copy draft restored")
+                    eq(restored.sessionId, "", "copy has a fresh provider session")
+                    eq(restored.handoffHome, "", "copy has no provider handoff")
+                    eq(restored.uiStates["3"]["calc:0"].weight.v, 8, "copy keeps calculator input")
+                    eq(restored.checklistStates["3"]["0:1"], true, "copy keeps checklists")
+                    restored.setUiState(3, "calc:0", {weight: {v: 2, u: ""}})
+                    restored.resumeWorkspace("ws-check0001")
+                    pollUntil(function() { return !restored.loadingLatest && restored.workspaceId === "ws-check0001"
+                        && !restored.storeBusy }, function(original) {
+                        if (!original) { failures.push("original did not reopen"); finish(); return }
+                        eq(restored.workspaceDisplayTitle, "Laptop decision tool", "original name survives copy")
+                        eq(restored.uiStates["3"]["calc:0"].weight.v, 8, "copy edits leave original inputs intact")
+                        eq(restored.sessionId, "original-session", "original provider session stays intact")
+                        restored.storeRun("delete", {workspaceId: copyId})
+                        pollUntil(function() { return !restored.storeBusy }, function(deleted) {
+                            if (!deleted) failures.push("copy delete did not settle")
+                            saved.destroy()
+                            saved = restored
+                            restored = null
+                            newChatPhase()
+                        })
+                    })
+                })
+            })
+        })
     }
 
     property var fallbackFailures: []
@@ -165,8 +292,9 @@ ShellRoot {
         }
 
         onTriggered: {
-            if (!Quickshell.env("XDG_STATE_HOME")) {
-                console.error("XDG_STATE_HOME must point at a scratch directory")
+            if (Quickshell.env("XDG_STATE_HOME").indexOf("/tmp/opencode/") !== 0
+                || Quickshell.env("HOME").indexOf("/tmp/opencode/") !== 0) {
+                console.error("HOME and XDG_STATE_HOME must point at scratch directories under /tmp/opencode")
                 Qt.exit(2)
                 return
             }

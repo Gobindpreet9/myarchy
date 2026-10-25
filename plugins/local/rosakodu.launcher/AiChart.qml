@@ -13,6 +13,19 @@ Item {
     required property color background
     required property color accent
     signal openUrl(string url)
+    // The host's "Ask about this" gate (latest finished answer, idle service,
+    // and a plain `chart` block). Closed, there is no Ask control and `?` does
+    // nothing. The part is the selected observation (the chart is ONE Tab stop).
+    property bool canFocus: false
+    // The person wants to ask about observation `index` (user-initiated).
+    signal focusRequested(int index, string label, string detail)
+    readonly property var askParts: root.canFocus ? AiState.askParts(root.block) : []
+    readonly property var askPart: root.canFocus && root.selectedIndex >= 0 && root.selectedIndex < root.askParts.length
+        ? root.askParts[root.selectedIndex] : null
+    function askAbout() {
+        var part = root.askPart;
+        if (part) root.focusRequested(part.index, part.label, part.detail);
+    }
     readonly property bool market: block.type === "market"
     readonly property string sourceUrl: String(block.sourceUrl || (/^https?:\/\//i.test(String(block.source || "")) ? block.source : ""))
     readonly property var points: normalizedPoints()
@@ -56,7 +69,10 @@ Item {
     Keys.onLeftPressed: select(selectedIndex - 1)
     Keys.onRightPressed: select(selectedIndex + 1)
     Keys.onPressed: function(event) {
-        if (event.key === Qt.Key_Home) { select(0); event.accepted = true; }
+        if (event.key === Qt.Key_Question || event.text === "?") {
+            if (root.askPart) { root.askAbout(); event.accepted = true; }
+        }
+        else if (event.key === Qt.Key_Home) { select(0); event.accepted = true; }
         else if (event.key === Qt.Key_End) { select(points.length - 1); event.accepted = true; }
     }
 
@@ -64,7 +80,7 @@ Item {
         id: headline
         x: Satin.space.gutter
         y: Satin.space.tip
-        width: parent.width - 2 * x
+        width: parent.width - 2 * x - (askButton.visible ? askButton.width + Satin.space.tip : 0)
         text: root.selectedPoint ? root.format(root.selectedPoint.value) : qsTr("Chart unavailable")
         textFormat: Text.PlainText
         elide: Text.ElideRight
@@ -79,8 +95,21 @@ Item {
         text: root.selectedPoint ? (root.market && root.block.symbol ? String(root.block.symbol) + "  ·  " : "") + root.selectedPoint.label + "  ·  " + root.changeText : ""
         textFormat: Text.PlainText
         elide: Text.ElideRight
-        color: root.alpha(root.foreground, 0.72)
+        color: root.alpha(root.foreground, 0.76)
         font.pixelSize: Satin.type.label
+    }
+    AiAskButton {
+        id: askButton
+        objectName: "aiChartAsk"
+        z: 2
+        x: root.width - width - Satin.space.gutter
+        y: Satin.space.tip
+        visible: root.askPart !== null
+        subject: root.askPart ? root.askPart.label : ""
+        foreground: root.foreground
+        surface: root.background
+        accent: root.accent
+        onClicked: root.askAbout()
     }
     Item {
         id: plot
@@ -131,7 +160,7 @@ Item {
             elide: Text.ElideRight
             horizontalAlignment: Text.AlignRight
             font.pixelSize: Satin.type.label
-            color: root.alpha(root.foreground, 0.6)
+            color: root.alpha(root.foreground, 0.76)
         }
     }
     Row {
@@ -149,7 +178,7 @@ Item {
                 horizontalAlignment: index === 0 ? Text.AlignLeft : Text.AlignRight
                 elide: Text.ElideRight
                 font.pixelSize: Satin.type.label
-                color: root.alpha(root.foreground, 0.6)
+                color: root.alpha(root.foreground, 0.76)
             }
         }
     }
@@ -198,7 +227,7 @@ Item {
         wrapMode: Text.Wrap
         verticalAlignment: Text.AlignVCenter
         horizontalAlignment: Text.AlignHCenter
-        color: root.alpha(root.foreground, 0.72)
+        color: root.alpha(root.foreground, 0.76)
         font.pixelSize: Satin.type.meta
         Accessible.name: text
     }
@@ -221,7 +250,7 @@ Item {
             textFormat: Text.PlainText
             elide: Text.ElideRight
             font.pixelSize: Satin.type.label
-            color: root.alpha(root.foreground, 0.64)
+            color: root.alpha(root.foreground, 0.76)
             verticalAlignment: Text.AlignVCenter
         }
         background: Rectangle {

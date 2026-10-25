@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "CsvTypes.js" as CsvTypes
 
 // Retained, local-only reader. Surface visibility grants permission to START
 // work; hiding a surface never discards an already-started read or its result.
@@ -17,6 +18,12 @@ Item {
     property var data: null
     property string error: ""
     property double token: 0
+    // User corrections to inferred column types: "" (use the inference) or an
+    // enum value per displayed column. They belong to the current read only:
+    // every invalidation (path, restore, workspace, new chat, retry) clears
+    // them, exactly like readiness, and they never leave this object except
+    // through requestColumnTypes() at an explicit send.
+    property var typeOverrides: []
     readonly property bool isCsv: /\.csv$/i.test(path)
     readonly property bool pathMatch: _resultPath === path && _resultToken === token
     readonly property bool blocked: isCsv && !(status === "ready" && pathMatch)
@@ -36,6 +43,22 @@ Item {
         catch (_) { return 32769 }
     }
 
+    function setColumnType(column, type) {
+        if (status !== "ready" || !pathMatch || !data || !Array.isArray(data.columns)) return false
+        if (typeof column !== "number" || Math.floor(column) !== column
+                || column < 0 || column >= data.columns.length) return false
+        if (type !== "" && !CsvTypes.isType(type)) return false
+        typeOverrides = CsvTypes.setOverride(typeOverrides, data.columns.length, column, type)
+        return true
+    }
+
+    // Validated request payload: null, or one enum-or-null entry per displayed
+    // column. Only a ready preview of the current path may contribute.
+    function requestColumnTypes() {
+        if (status !== "ready" || !pathMatch || !data || !Array.isArray(data.columns)) return null
+        return CsvTypes.requestTypes(typeOverrides, data.columns.length)
+    }
+
     function reset() { invalidate() }
     function retry() { invalidate() }
     function invalidate() {
@@ -45,6 +68,7 @@ Item {
         _resultPath = ""
         _resultToken = -1
         data = null
+        typeOverrides = []
         error = ""
         status = "idle"
         // Keep the process slot occupied until exited, not merely until the
@@ -69,6 +93,7 @@ Item {
         _terminal = true
         watchdog.stop()
         data = null
+        typeOverrides = []
         error = message
         status = "error"
         if (worker.running) stopWorker()
@@ -181,6 +206,7 @@ Item {
             truncated: p.truncated, note: p.note}
         _resultPath = _runPath
         _resultToken = _runToken
+        typeOverrides = []
         error = ""
         status = "ready"
         if (worker.running) stopWorker()

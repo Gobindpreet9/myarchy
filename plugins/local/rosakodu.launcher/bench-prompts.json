@@ -1,92 +1,479 @@
 [
-  {"id": "learn-seasons", "kind": "learning",
-   "prompt": "Teach me why the seasons happen",
-   "expect": {"blocksAny": ["diagram", "slider", "steps", "check"]}},
-  {"id": "learn-water-cycle", "kind": "learning",
-   "prompt": "Draw a simple diagram of the water cycle and let me step through it",
-   "expect": {"blocksAny": ["diagram", "steps"]}},
-  {"id": "learn-practice", "kind": "learning",
-   "prompt": "Quiz me on the order of the planets",
-   "expect": {"blocksAny": ["check", "steps"]}},
-  {"id": "learn-predict", "kind": "learning",
-   "prompt": "Before you tell me: what happens to a balloon in a freezer? Let me predict first",
-   "expect": {"blocksAny": ["predict", "check"]}},
-  {"id": "learn-slider", "kind": "learning",
-   "prompt": "Show me how the noon sun angle changes through the year at 49 degrees north",
-   "expect": {"blocksAny": ["diagram", "slider"]}},
-  {"id": "learn-tides", "kind": "learning",
-   "prompt": "Explain tides and let me vary the moon phase",
-   "expect": {"blocksAny": ["diagram", "slider", "steps"]}},
-  {"id": "learn-compound", "kind": "learning",
-   "prompt": "Show how compound interest grows over time and let me adjust the rate",
-   "expect": {"blocksAny": ["slider", "chart", "diagram"]}},
-  {"id": "learn-fractions", "kind": "learning",
-   "prompt": "Teach me equivalent fractions with something I can step through",
-   "expect": {"blocksAny": ["steps", "diagram"]}},
-  {"id": "explore-styles", "kind": "exploration",
-   "prompt": "Help me recognise Gothic, Romanesque and Renaissance architecture",
-   "expect": {"blocksAny": ["gallery", "image", "table"], "needsImages": true}},
-  {"id": "explore-birds", "kind": "exploration",
-   "prompt": "Show me photos that help tell a raven apart from a crow",
-   "expect": {"blocksAny": ["gallery", "image"], "needsImages": true}},
-  {"id": "explore-compare", "kind": "exploration",
-   "prompt": "Compare maple and oak leaves for me",
-   "expect": {"blocksAny": ["gallery", "image", "table"]}},
-  {"id": "explore-posters", "kind": "exploration",
-   "prompt": "Show examples of Art Nouveau and Art Deco design side by side",
-   "expect": {"blocksAny": ["gallery", "image"], "needsImages": true}},
-  {"id": "explore-clouds", "kind": "exploration",
-   "prompt": "Help me recognise the main kinds of clouds from pictures",
-   "expect": {"blocksAny": ["gallery", "image"], "needsImages": true}},
-  {"id": "explore-planets", "kind": "exploration",
-   "prompt": "Show me the planets of the solar system so I can compare their surfaces",
-   "expect": {"blocksAny": ["gallery", "image", "table"]}},
-  {"id": "explore-reef", "kind": "exploration",
-   "prompt": "What do the different zones of a coral reef look like?",
-   "expect": {"blocksAny": ["gallery", "image", "diagram"]}},
-  {"id": "explore-languages", "kind": "exploration",
-   "prompt": "Show me how the same sentence looks across a few writing systems",
-   "expect": {"blocksAny": ["gallery", "image", "table"]}},
-  {"id": "mini-sort", "kind": "mini-app",
-   "prompt": "Let me explore sorting a short list of numbers by hand",
-   "expect": {}},
-  {"id": "mini-budget", "kind": "mini-app",
-   "prompt": "Plan my weekly budget with amounts I can adjust",
-   "expect": {"blocksAny": ["slider", "table", "metric", "chart", "checklist"]}},
-  {"id": "mini-laptop", "kind": "mini-app",
-   "prompt": "Help me decide on a laptop with a comparison I can weigh",
-   "expect": {"blocksAny": ["table", "checklist", "metric"]}},
-  {"id": "mini-workout", "kind": "mini-app",
-   "prompt": "Build me a simple weekly workout plan I can follow",
-   "expect": {"blocksAny": ["table", "checklist", "steps"]}},
-  {"id": "mini-route", "kind": "mini-app",
-   "prompt": "Compare travel options from Paris to Amsterdam for a weekend",
-   "expect": {"blocksAny": ["table", "metric"]}},
-  {"id": "mini-decision", "kind": "mini-app",
-   "prompt": "Give me a decision framework for choosing between two job offers",
-   "expect": {"blocksAny": ["table", "checklist", "check", "steps"]}},
-  {"id": "mini-recipe", "kind": "mini-app",
-   "prompt": "Scale a pancake recipe for different numbers of people",
-   "expect": {"blocksAny": ["slider", "table", "steps", "metric"]}},
-  {"id": "mini-study", "kind": "mini-app",
-   "prompt": "Plan a two-week study schedule for a beginner Spanish learner",
-   "expect": {"blocksAny": ["steps", "checklist", "table", "progress"]}},
-  {"id": "simple-hello", "kind": "simple",
-   "prompt": "Hello!",
-   "expect": {"blocksNone": ["diagram", "slider", "gallery", "chart", "market"]}},
-  {"id": "simple-fact", "kind": "simple",
-   "prompt": "What is the capital of Portugal?",
-   "expect": {"blocksNone": ["diagram", "slider", "gallery"]}},
-  {"id": "simple-define", "kind": "simple",
-   "prompt": "What does the word petrichor mean?",
-   "expect": {"blocksNone": ["diagram", "slider", "gallery", "chart"]}},
-  {"id": "mixed-days", "kind": "mixed",
-   "prompt": "How many days until winter begins?",
-   "expect": {"blocksNone": ["gallery", "market"]}},
-  {"id": "mixed-tasks", "kind": "mixed",
-   "prompt": "Make me a checklist for preparing a bike for winter",
-   "expect": {"blocksAny": ["checklist", "steps", "progress"]}},
-  {"id": "failure-private", "kind": "failure",
-   "prompt": "Use my private files to answer what I had for lunch last Tuesday",
-   "expect": {"blocksNone": ["market", "chart"]}}
+  {
+    "id": "learn-seasons",
+    "kind": "learning",
+    "prompt": "Teach me why the seasons happen",
+    "expect": {
+      "blocksAny": [
+        "diagram",
+        "slider",
+        "steps",
+        "check"
+      ]
+    }
+  },
+  {
+    "id": "learn-water-cycle",
+    "kind": "learning",
+    "prompt": "Draw a simple diagram of the water cycle and let me step through it",
+    "expect": {
+      "blocksAny": [
+        "diagram",
+        "steps"
+      ]
+    }
+  },
+  {
+    "id": "learn-practice",
+    "kind": "learning",
+    "prompt": "Quiz me on the order of the planets",
+    "expect": {
+      "blocksAny": [
+        "check",
+        "steps"
+      ]
+    }
+  },
+  {
+    "id": "learn-predict",
+    "kind": "learning",
+    "prompt": "Before you tell me: what happens to a balloon in a freezer? Let me predict first",
+    "expect": {
+      "blocksAny": [
+        "predict",
+        "check"
+      ]
+    }
+  },
+  {
+    "id": "learn-slider",
+    "kind": "learning",
+    "prompt": "Show me how the noon sun angle changes through the year at 49 degrees north",
+    "expect": {
+      "blocksAny": [
+        "diagram",
+        "slider"
+      ]
+    }
+  },
+  {
+    "id": "learn-tides",
+    "kind": "learning",
+    "prompt": "Explain tides and let me vary the moon phase",
+    "expect": {
+      "blocksAny": [
+        "diagram",
+        "slider",
+        "steps"
+      ]
+    }
+  },
+  {
+    "id": "learn-compound",
+    "kind": "learning",
+    "prompt": "Show how compound interest grows over time and let me adjust the rate",
+    "expect": {
+      "blocksAny": [
+        "slider",
+        "chart",
+        "diagram"
+      ]
+    }
+  },
+  {
+    "id": "learn-fractions",
+    "kind": "learning",
+    "prompt": "Teach me equivalent fractions with something I can step through",
+    "expect": {
+      "blocksAny": [
+        "steps",
+        "diagram"
+      ]
+    }
+  },
+  {
+    "id": "explore-styles",
+    "kind": "exploration",
+    "prompt": "Help me recognise Gothic, Romanesque and Renaissance architecture",
+    "expect": {
+      "blocksAny": [
+        "gallery",
+        "image",
+        "table"
+      ],
+      "needsImages": true
+    }
+  },
+  {
+    "id": "explore-birds",
+    "kind": "exploration",
+    "prompt": "Show me photos that help tell a raven apart from a crow",
+    "expect": {
+      "blocksAny": [
+        "gallery",
+        "image"
+      ],
+      "needsImages": true
+    }
+  },
+  {
+    "id": "explore-compare",
+    "kind": "exploration",
+    "prompt": "Compare maple and oak leaves for me",
+    "expect": {
+      "blocksAny": [
+        "gallery",
+        "image",
+        "table"
+      ]
+    }
+  },
+  {
+    "id": "explore-posters",
+    "kind": "exploration",
+    "prompt": "Show examples of Art Nouveau and Art Deco design side by side",
+    "expect": {
+      "blocksAny": [
+        "gallery",
+        "image"
+      ],
+      "needsImages": true
+    }
+  },
+  {
+    "id": "explore-clouds",
+    "kind": "exploration",
+    "prompt": "Help me recognise the main kinds of clouds from pictures",
+    "expect": {
+      "blocksAny": [
+        "gallery",
+        "image"
+      ],
+      "needsImages": true
+    }
+  },
+  {
+    "id": "explore-planets",
+    "kind": "exploration",
+    "prompt": "Show me the planets of the solar system so I can compare their surfaces",
+    "expect": {
+      "blocksAny": [
+        "gallery",
+        "image",
+        "table"
+      ]
+    }
+  },
+  {
+    "id": "explore-reef",
+    "kind": "exploration",
+    "prompt": "What do the different zones of a coral reef look like?",
+    "expect": {
+      "blocksAny": [
+        "gallery",
+        "image",
+        "diagram"
+      ]
+    }
+  },
+  {
+    "id": "explore-languages",
+    "kind": "exploration",
+    "prompt": "Show me how the same sentence looks across a few writing systems",
+    "expect": {
+      "blocksAny": [
+        "gallery",
+        "image",
+        "table"
+      ]
+    }
+  },
+  {
+    "id": "mini-sort",
+    "kind": "mini-app",
+    "prompt": "Let me explore sorting a short list of numbers by hand",
+    "expect": {}
+  },
+  {
+    "id": "mini-budget",
+    "kind": "mini-app",
+    "prompt": "Plan my weekly budget with amounts I can adjust",
+    "expect": {
+      "blocksAny": [
+        "slider",
+        "table",
+        "metric",
+        "chart",
+        "checklist",
+        "calc"
+      ]
+    }
+  },
+  {
+    "id": "mini-laptop",
+    "kind": "mini-app",
+    "prompt": "Help me decide on a laptop with a comparison I can weigh",
+    "expect": {
+      "blocksAny": [
+        "table",
+        "checklist",
+        "metric",
+        "compare"
+      ]
+    }
+  },
+  {
+    "id": "mini-workout",
+    "kind": "mini-app",
+    "prompt": "Build me a simple weekly workout plan I can follow",
+    "expect": {
+      "blocksAny": [
+        "table",
+        "checklist",
+        "steps",
+        "timeline"
+      ]
+    }
+  },
+  {
+    "id": "mini-route",
+    "kind": "mini-app",
+    "prompt": "Compare travel options from Paris to Amsterdam for a weekend",
+    "expect": {
+      "blocksAny": [
+        "table",
+        "metric",
+        "compare"
+      ]
+    }
+  },
+  {
+    "id": "mini-decision",
+    "kind": "mini-app",
+    "prompt": "Give me a decision framework for choosing between two job offers",
+    "expect": {
+      "blocksAny": [
+        "table",
+        "checklist",
+        "check",
+        "steps",
+        "compare"
+      ]
+    }
+  },
+  {
+    "id": "mini-recipe",
+    "kind": "mini-app",
+    "prompt": "Scale a pancake recipe for different numbers of people",
+    "expect": {
+      "blocksAny": [
+        "slider",
+        "table",
+        "steps",
+        "metric",
+        "calc"
+      ]
+    }
+  },
+  {
+    "id": "mini-study",
+    "kind": "mini-app",
+    "prompt": "Plan a two-week study schedule for a beginner Spanish learner",
+    "expect": {
+      "blocksAny": [
+        "steps",
+        "checklist",
+        "table",
+        "progress",
+        "timeline"
+      ]
+    }
+  },
+  {
+    "id": "mini-calc-laptop",
+    "kind": "mini-app",
+    "prompt": "Help me pick a laptop: I will set how much I care about speed, battery and price, and you score three options from those weights",
+    "expect": {
+      "blocksAny": [
+        "calc"
+      ],
+      "maxSeconds": 120
+    }
+  },
+  {
+    "id": "mini-calc-loan",
+    "kind": "mini-app",
+    "prompt": "What would my monthly payment be on a 20000 EUR loan over 4 years at 5%? Let me change the rate and the term",
+    "expect": {
+      "blocksAny": [
+        "calc"
+      ],
+      "maxSeconds": 120
+    }
+  },
+  {
+    "id": "mini-calc-budget",
+    "kind": "mini-app",
+    "prompt": "Plan my trip budget: the hotel is 90 EUR a night and food is 40 USD a day. Let me set the number of nights and the exchange rate",
+    "expect": {
+      "blocksAny": [
+        "calc"
+      ],
+      "maxSeconds": 120
+    }
+  },
+  {
+    "id": "simple-hello",
+    "kind": "simple",
+    "prompt": "Hello!",
+    "expect": {
+      "blocksNone": [
+        "diagram",
+        "slider",
+        "gallery",
+        "chart",
+        "market"
+      ]
+    }
+  },
+  {
+    "id": "simple-fact",
+    "kind": "simple",
+    "prompt": "What is the capital of Portugal?",
+    "expect": {
+      "blocksNone": [
+        "diagram",
+        "slider",
+        "gallery"
+      ]
+    }
+  },
+  {
+    "id": "simple-define",
+    "kind": "simple",
+    "prompt": "What does the word petrichor mean?",
+    "expect": {
+      "blocksNone": [
+        "diagram",
+        "slider",
+        "gallery",
+        "chart"
+      ]
+    }
+  },
+  {
+    "id": "mixed-days",
+    "kind": "mixed",
+    "prompt": "How many days until winter begins?",
+    "expect": {
+      "blocksNone": [
+        "gallery",
+        "market"
+      ]
+    }
+  },
+  {
+    "id": "mixed-tasks",
+    "kind": "mixed",
+    "prompt": "Make me a checklist for preparing a bike for winter",
+    "expect": {
+      "blocksAny": [
+        "checklist",
+        "steps",
+        "progress"
+      ]
+    }
+  },
+  {
+    "id": "failure-private",
+    "kind": "failure",
+    "prompt": "Use my private files to answer what I had for lunch last Tuesday",
+    "expect": {
+      "blocksNone": [
+        "market",
+        "chart"
+      ]
+    }
+  },
+  {
+    "id": "mini-form-trip",
+    "kind": "mini-app",
+    "prompt": "I'm planning a weekend away: ask me for the dates, my budget and how many people are coming, then plan around my answers",
+    "expect": {
+      "blocksAny": [
+        "form"
+      ],
+      "maxSeconds": 120
+    }
+  },
+  {
+    "id": "mini-form-study",
+    "kind": "mini-app",
+    "prompt": "Set up a study plan for me: ask what subject, how many hours a week I can give it, and whether I prefer mornings or evenings",
+    "expect": {
+      "blocksAny": [
+        "form"
+      ],
+      "maxSeconds": 120
+    }
+  },
+  {
+    "id": "mini-form-control-loan",
+    "kind": "mini-app",
+    "prompt": "Let me vary the interest rate and see my loan payment",
+    "expect": {
+      "blocksAny": [
+        "calc",
+        "slider"
+      ],
+      "blocksNone": [
+        "form"
+      ],
+      "maxSeconds": 120
+    }
+  },
+  {
+    "id": "mini-choice-trip",
+    "kind": "mini-app",
+    "prompt": "Plan a weekend trip for me: first give me three destination options to pick from",
+    "expect": {
+      "blocksAny": [
+        "actions"
+      ],
+      "maxSeconds": 120
+    }
+  },
+  {
+    "id": "mini-compare-phones",
+    "kind": "mini-app",
+    "prompt": "Compare the iPhone 17 and the Pixel 11 for me",
+    "expect": {
+      "blocksAny": [
+        "compare"
+      ],
+      "maxSeconds": 120
+    }
+  },
+  {
+    "id": "mini-timeline-recipe",
+    "kind": "mini-app",
+    "prompt": "Give me a step by step timeline to cook a roast chicken dinner for 4 starting at 4pm",
+    "expect": {
+      "blocksAny": [
+        "timeline"
+      ],
+      "maxSeconds": 120
+    }
+  },
+  {
+    "id": "mini-timeline-route",
+    "kind": "mini-app",
+    "prompt": "Plan a one-day walking tour of Lisbon with times",
+    "expect": {
+      "blocksAny": [
+        "timeline"
+      ],
+      "maxSeconds": 120
+    }
+  }
 ]

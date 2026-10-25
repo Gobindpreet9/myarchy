@@ -23,6 +23,7 @@ TestCase {
     Item { id: before; activeFocusOnTab: true }
     Item { id: after; activeFocusOnTab: true }
     SignalSpy { id: retrySpy; target: preview; signalName: "retryRequested" }
+    SignalSpy { id: chosenSpy; target: preview; signalName: "columnTypeChosen" }
 
     function child(name) { return findChild(preview, name) }
 
@@ -42,7 +43,7 @@ TestCase {
     function ready(data) {
         preview.preview = data
         preview.status = "ready"
-        tryVerify(function() { return child("aiCsvPreviewViewport") !== null })
+        tryVerify(function() { return child("aiCsvPreviewReady").item !== null })
         waitForRendering(preview)
         return child("aiCsvPreviewViewport")
     }
@@ -52,8 +53,12 @@ TestCase {
         preview.preview = ({})
         preview.error = ""
         preview.width = 660
+        preview.typeOverrides = []
+        preview.collapsible = false
+        preview.detailOpen = false
         before.forceActiveFocus()
         retrySpy.clear()
+        chosenSpy.clear()
         wait(0)
     }
 
@@ -131,6 +136,23 @@ TestCase {
         compare(child("aiCsvPreviewCells"), null)
         preview.error = ""
         compare(child("aiCsvPreviewError").text, "CSV preview is unavailable.")
+    }
+
+    function test_errorHintSaysWhatToDoWithoutChangingTheMessage() {
+        preview.status = "error"
+        preview.error = "Attachment is unavailable or is a symbolic link."
+        waitForRendering(preview)
+        compare(child("aiCsvPreviewError").text, preview.error, "the static error stays verbatim")
+        var hint = child("aiCsvPreviewHint")
+        verify(hint.visible)
+        compare(hint.textFormat, Text.PlainText)
+        verify(hint.text.indexOf("remove the attachment") >= 0)
+        verify(child("aiCsvPreviewError").y + child("aiCsvPreviewError").height <= hint.y)
+        verify(hint.y + hint.height <= child("aiCsvPreviewRetry").y)
+        preview.error = "CSV preview timed out. Retry to read the file again."
+        verify(!child("aiCsvPreviewHint").visible, "no hint when the message already says what to do")
+        preview.status = "loading"
+        verify(!child("aiCsvPreviewHint").visible)
     }
 
     function test_unknownTotalsAndSnapshotDisclosures() {
@@ -314,5 +336,453 @@ TestCase {
         verify(pan.contentX < x, "Dragging back must move the horizontal content back")
         dragThumb(scroll.ScrollBar.vertical, 0, -40)
         verify(pan.contentY < y, "Dragging back must move the vertical content back")
+    }
+
+    // ---- column types: inference indicators and correction ----
+
+    function typesFixture() {
+        var data = fixture(0, 0)
+        data.columns = ["City", "Rent", "Since", "Zip", "Share", "Seen"]
+        data.rows = [
+            ["Oslo", "1200", "2024-01-02", "01234", "12%", "01/02/03"],
+            ["Porto", "600", "2023-05-17", "02134", "7.5%", "04/05/06"],
+            ["Lisbon", "", "2022-11-30", "90210", "9%", "07/08/09"]
+        ]
+        data.previewRows = 3
+        data.sampleRows = 3
+        data.totalRows = 3
+        data.columnCount = 6
+        return data
+    }
+
+    function typeButton(i) { return child("aiCsvPreviewType" + i) }
+
+    function test_everyHeaderShowsItsInferredType() {
+        ready(typesFixture())
+        compare(child("aiCsvPreviewHeaders").count, 6)
+        var expected = ["abc", "123", "date", "abc", "123", "?"]
+        var names = ["Text", "Number", "Date", "Text", "Number", "Unsure"]
+        for (var i = 0; i < 6; ++i) {
+            var button = typeButton(i)
+            verify(button !== null && button.visible, "header " + i + " has a type control")
+            compare(button.text, expected[i])
+            verify(button.Accessible.name.indexOf("type: " + names[i]) >= 0, button.Accessible.name)
+            verify(button.Accessible.name.indexOf("inferred") >= 0)
+            verify(button.Accessible.name.indexOf("Column " + typesFixture().columns[i]) === 0)
+            compare(button.corrected, false)
+            verify(button.Accessible.description.length > 0)
+            compare(button.Accessible.role, Accessible.Button)
+        }
+        verify(typeButton(1).Accessible.description.indexOf("2 non-empty values in the rows shown (1 empty)") >= 0,
+            typeButton(1).Accessible.description)
+        verify(typeButton(5).Accessible.description.indexOf("Day/month order is unclear") >= 0)
+        verify(typeButton(3).Accessible.description.indexOf("Leading zeros") >= 0, "postcodes are kept as text")
+        compare(chosenSpy.count, 0, "Showing the preview never emits a correction")
+    }
+
+    function test_typeNoteDisclosesSampleOnlyInference() {
+        ready(typesFixture())
+        var note = child("aiCsvPreviewTypeNote")
+        verify(note.visible)
+        compare(note.textFormat, Text.PlainText)
+        verify(note.text.indexOf("inferred from the rows shown, not the whole file") >= 0, note.text)
+        verify(note.text.indexOf("Corrected:") < 0, "no corrections yet")
+        compare(note.color.toString(), Qt.alpha(preview.foreground, 0.80).toString())
+        verify(note.color.a >= 0.76)
+        verify(!note.truncated)
+        var scroll = child("aiCsvPreviewScroll")
+        var footer = child("aiCsvPreviewFooter")
+        verify(scroll.y + scroll.height <= note.y)
+        verify(note.y + note.height <= footer.y)
+    }
+
+    function test_typeIndicatorsStayReadableAndBounded() {
+        ready(fixture(10, 20))
+        for (var i = 0; i < 20; ++i) {
+            var button = typeButton(i)
+            verify(button !== null)
+            verify(button.width >= 36 && button.height >= 22, "indicator keeps a usable target")
+            var label = button.contentItem
+            verify(label.color.a >= 0.76, "informational text keeps contrast, got " + label.color.a)
+            compare(label.textFormat, Text.PlainText)
+            verify(button.x + button.width <= child("aiCsvPreviewViewport").columnWidth + 0.5 + button.parent.x,
+                "indicator stays inside its header cell")
+        }
+        compare(typeButton(20), null, "never more than twenty controls")
+        // The header name never overlaps its indicator.
+        var header = child("aiCsvPreviewHeader0")
+        verify(header.width > 0)
+        verify(header.x + header.width <= typeButton(0).x)
+    }
+
+    function test_hostCorrectionsAreShownAndNeverInventedByTheComponent() {
+        ready(typesFixture())
+        compare(typeButton(5).text, "?")
+        preview.typeOverrides = ["", "", "", "number", "", "date"]
+        compare(typeButton(3).text, "123")
+        compare(typeButton(3).corrected, true)
+        compare(typeButton(5).text, "date")
+        compare(typeButton(5).corrected, true)
+        compare(typeButton(1).corrected, false)
+        verify(typeButton(3).Accessible.name.indexOf("corrected by you") >= 0)
+        verify(typeButton(3).Accessible.description.indexOf("corrected by you") >= 0)
+        verify(typeButton(3).Accessible.description.indexOf("Inferred") >= 0, "the inference stays visible")
+        compare(typeButton(3).contentItem.color.toString(), preview.accent.toString())
+        verify(child("aiCsvPreviewTypeNote").text.indexOf("Corrected: 2 (sent with your question).") >= 0,
+            child("aiCsvPreviewTypeNote").text)
+        // Unknown or unsafe values are ignored, never displayed.
+        preview.typeOverrides = ["bogus", "unsure", "<b>date</b>", 7, null, "Number"]
+        for (var i = 0; i < 6; ++i) compare(typeButton(i).corrected, false)
+        compare(typeButton(5).text, "?")
+        verify(child("aiCsvPreviewTypeNote").text.indexOf("Corrected:") < 0)
+        compare(chosenSpy.count, 0)
+    }
+
+    function test_correctionByMouse() {
+        var pan = ready(typesFixture())
+        var button = typeButton(1)
+        mouseClick(button, button.width / 2, button.height / 2)
+        var menu = child("aiCsvPreviewTypeMenu")
+        tryCompare(menu, "opened", true)
+        compare(menu.column, 1)
+        compare(chosenSpy.count, 0, "Opening the menu is not a correction")
+        var item = menu.itemAt(1)
+        compare(item.text, "Date")
+        mouseClick(item, item.width / 2, item.height / 2)
+        compare(chosenSpy.count, 1)
+        compare(chosenSpy.signalArguments[0][0], 1)
+        compare(chosenSpy.signalArguments[0][1], "date")
+        tryCompare(menu, "opened", false)
+        compare(preview.typeOverrides.length, 0, "The component only asks; the host owns corrections")
+        compare(typeButton(1).corrected, false)
+        tryCompare(typeButton(1), "activeFocus", true)
+    }
+
+    function test_correctionByKeyboardOnly() {
+        ready(typesFixture())
+        child("aiCsvPreviewViewport").forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Tab)
+        tryCompare(typeButton(0), "activeFocus", true)
+        verify(typeButton(0).visualFocus, "keyboard focus draws the focus ring")
+        compare(typeButton(0).background.border.width, 2)
+        compare(typeButton(0).background.border.color.toString(), preview.accent.toString())
+        // The badges are one Tab stop: Right (not Tab) moves to the next one.
+        keyClick(Qt.Key_Right)
+        tryCompare(typeButton(1), "activeFocus", true)
+        keyClick(Qt.Key_Space)
+        var menu = child("aiCsvPreviewTypeMenu")
+        tryCompare(menu, "opened", true)
+        compare(menu.column, 1)
+        keyClick(Qt.Key_Down)
+        keyClick(Qt.Key_Down)
+        keyClick(Qt.Key_Return)
+        compare(chosenSpy.count, 1)
+        compare(chosenSpy.signalArguments[0][0], 1)
+        compare(chosenSpy.signalArguments[0][1], "date")
+        tryCompare(menu, "opened", false)
+        tryCompare(typeButton(1), "activeFocus", true)
+        // Return opens it too; Escape closes without choosing.
+        keyClick(Qt.Key_Return)
+        tryCompare(menu, "opened", true)
+        keyClick(Qt.Key_Escape)
+        tryCompare(menu, "opened", false)
+        compare(chosenSpy.count, 1, "Escape never corrects a column")
+        tryCompare(typeButton(1), "activeFocus", true)
+    }
+
+    function test_menuOffersAllThreeTypesAndTheInferredChoice() {
+        ready(typesFixture())
+        preview.typeOverrides = ["", "", "", "", "", "number"]
+        // Column 5 sits partly past the right edge; keyboard focus scrolls it in.
+        typeButton(5).forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(typeButton(5), "activeFocus", true)
+        keyClick(Qt.Key_Space)
+        var menu = child("aiCsvPreviewTypeMenu")
+        tryCompare(menu, "opened", true)
+        compare(menu.count, 4)
+        compare(menu.itemAt(0).text, "Number")
+        compare(menu.itemAt(1).text, "Date")
+        compare(menu.itemAt(2).text, "Text")
+        compare(menu.itemAt(3).text, "Use the inferred type (Unsure)")
+        verify(menu.itemAt(0).chosen && !menu.itemAt(1).chosen)
+        verify(menu.itemAt(0).Accessible.name.indexOf("selected") >= 0)
+        verify(menu.itemAt(0).contentItem.text.indexOf("\u2713") === 0)
+        menu.itemAt(3).triggered()
+        compare(chosenSpy.signalArguments[0][0], 5)
+        compare(chosenSpy.signalArguments[0][1], "", "choosing the inferred type clears the correction")
+        menu.close()
+        tryCompare(menu, "opened", false)
+    }
+
+    function test_focusedLastIndicatorScrollsIntoView() {
+        preview.width = 320
+        var pan = ready(fixture(10, 20))
+        compare(pan.contentX, 0)
+        typeButton(19).forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(typeButton(19), "activeFocus", true)
+        compare(pan.contentX, Math.max(0, pan.contentWidth - pan.width))
+        var mapped = typeButton(19).mapToItem(pan, 0, 0)
+        verify(mapped.x >= 0 && mapped.x + typeButton(19).width <= pan.width + 0.5,
+            "focused control is inside the viewport, x=" + mapped.x)
+        typeButton(0).forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(typeButton(0), "activeFocus", true)
+        compare(pan.contentX, 0)
+    }
+
+    function test_typeControlsLeaveWithTheReadyState() {
+        ready(typesFixture())
+        verify(typeButton(0) !== null)
+        preview.status = "loading"
+        tryVerify(function() { return typeButton(0) === null })
+        tryVerify(function() { return child("aiCsvPreviewTypeNote") === null })
+        compare(preview.inferences.length, 0, "no inference outside the ready state")
+        compare(chosenSpy.count, 0)
+    }
+
+    function test_headerNamesStayLiteralNextToTheIndicator() {
+        var data = typesFixture()
+        data.columns[0] = "<b>City</b>"
+        ready(data)
+        compare(child("aiCsvPreviewHeader0").text, "<b>City</b>")
+        compare(child("aiCsvPreviewHeader0").textFormat, Text.PlainText)
+        verify(typeButton(0).Accessible.name.indexOf("Column <b>City</b> type:") === 0)
+    }
+
+    // ---- roving focus: the type badges are ONE Tab stop ----
+
+    function tabStops() {
+        var n = 0
+        for (var i = 0; i < 20; ++i)
+            if (typeButton(i) && (typeButton(i).focusPolicy & Qt.TabFocus)) ++n
+        return n
+    }
+
+    function test_badgesAreOneTabStopWithTabEnteringOnceAndLeaving() {
+        var pan = ready(fixture(10, 20))
+        compare(tabStops(), 1, "only the roving badge takes Tab")
+        compare(typeButton(0).focusPolicy & Qt.TabFocus, Qt.TabFocus)
+        // Grid viewport first, then the badge strip, then the next control.
+        after.forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Tab)
+        tryCompare(pan, "activeFocus", true)
+        keyClick(Qt.Key_Tab)
+        tryCompare(typeButton(0), "activeFocus", true)
+        keyClick(Qt.Key_Tab)
+        tryCompare(before, "activeFocus", true)
+        for (var i = 0; i < 20; ++i)
+            verify(!typeButton(i).activeFocus, "Tab skipped badge " + i)
+        compare(chosenSpy.count, 0)
+        // The whole walk from the composer side costs three stops, not twenty-two.
+        keyClick(Qt.Key_Tab, Qt.ShiftModifier)
+        tryCompare(typeButton(0), "activeFocus", true)
+        keyClick(Qt.Key_Tab, Qt.ShiftModifier)
+        tryCompare(pan, "activeFocus", true)
+    }
+
+    function test_arrowsHomeEndMoveBetweenBadgesAndShiftTabReturnsToTheSame() {
+        preview.width = 320
+        var pan = ready(fixture(10, 20))
+        pan.forceActiveFocus(Qt.TabFocusReason)
+        keyClick(Qt.Key_Tab)
+        tryCompare(typeButton(0), "activeFocus", true)
+        keyClick(Qt.Key_Left)
+        tryCompare(typeButton(0), "activeFocus", true, 500, "Left stops at the first badge")
+        for (var i = 1; i <= 3; ++i) {
+            keyClick(Qt.Key_Right)
+            tryCompare(typeButton(i), "activeFocus", true)
+            verify(typeButton(i).visualFocus, "focus ring on badge " + i)
+            compare(typeButton(i).background.border.width, 2)
+        }
+        compare(tabStops(), 1)
+        compare(typeButton(3).focusPolicy & Qt.TabFocus, Qt.TabFocus, "the Tab stop follows the focus")
+        verify(!(typeButton(0).focusPolicy & Qt.TabFocus))
+        keyClick(Qt.Key_Tab)
+        tryCompare(before, "activeFocus", true)
+        keyClick(Qt.Key_Tab, Qt.ShiftModifier)
+        tryCompare(typeButton(3), "activeFocus", true)
+        keyClick(Qt.Key_End)
+        tryCompare(typeButton(19), "activeFocus", true)
+        compare(pan.contentX, Math.max(0, pan.contentWidth - pan.width), "End scrolls the last badge into view")
+        keyClick(Qt.Key_Right)
+        tryCompare(typeButton(19), "activeFocus", true, 500, "Right stops at the last badge")
+        keyClick(Qt.Key_Home)
+        tryCompare(typeButton(0), "activeFocus", true)
+        compare(pan.contentX, 0)
+        compare(chosenSpy.count, 0, "Moving between badges never corrects a column")
+    }
+
+    function test_downSpaceAndReturnOpenTheMenuAndEscapeReturnsToTheBadge() {
+        ready(typesFixture())
+        var menu = child("aiCsvPreviewTypeMenu")
+        typeButton(2).forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(typeButton(2), "activeFocus", true)
+        keyClick(Qt.Key_Down)
+        tryCompare(menu, "opened", true)
+        compare(menu.column, 2)
+        keyClick(Qt.Key_Escape)
+        tryCompare(menu, "opened", false)
+        tryCompare(typeButton(2), "activeFocus", true)
+        verify(typeButton(2).visualFocus, "ring is back after the menu")
+        compare(chosenSpy.count, 0)
+        keyClick(Qt.Key_Space)
+        tryCompare(menu, "opened", true)
+        keyClick(Qt.Key_Escape)
+        tryCompare(menu, "opened", false)
+        keyClick(Qt.Key_Return)
+        tryCompare(menu, "opened", true)
+        keyClick(Qt.Key_Escape)
+        tryCompare(menu, "opened", false)
+        tryCompare(typeButton(2), "activeFocus", true)
+        // Arrows still work after the menu; Tab is still a single stop.
+        keyClick(Qt.Key_Right)
+        tryCompare(typeButton(3), "activeFocus", true)
+        compare(tabStops(), 1)
+        compare(chosenSpy.count, 0)
+    }
+
+    function test_mouseFocusMakesThatBadgeTheTabStopAndNamesSurvive() {
+        ready(typesFixture())
+        var button = typeButton(4)
+        mouseClick(button, button.width / 2, button.height / 2)
+        var menu = child("aiCsvPreviewTypeMenu")
+        tryCompare(menu, "opened", true)
+        menu.close()
+        tryCompare(menu, "opened", false)
+        tryCompare(typeButton(4), "activeFocus", true)
+        verify(!typeButton(4).visualFocus, "a mouse-opened menu does not draw the keyboard ring")
+        compare(tabStops(), 1)
+        compare(typeButton(4).focusPolicy & Qt.TabFocus, Qt.TabFocus)
+        keyClick(Qt.Key_Tab)
+        tryCompare(before, "activeFocus", true)
+        keyClick(Qt.Key_Tab, Qt.ShiftModifier)
+        tryCompare(typeButton(4), "activeFocus", true)
+        // Accessible names are unchanged for roving and non-roving badges alike.
+        verify(typeButton(0).Accessible.name.indexOf("Column City type: Text, inferred. Press to change.") === 0,
+            typeButton(0).Accessible.name)
+        verify(typeButton(4).Accessible.description.length > 0)
+        compare(typeButton(0).Accessible.role, Accessible.Button)
+    }
+
+    function test_rovingIndexIsClampedWhenColumnsShrink() {
+        ready(fixture(10, 20))
+        typeButton(15).forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(typeButton(15), "activeFocus", true)
+        ready(fixture(3, 2))
+        compare(tabStops(), 1, "one Tab stop even after the strip shrank")
+        compare(typeButton(1).focusPolicy & Qt.TabFocus, Qt.TabFocus)
+    }
+
+    // ---- collapsible form (a durable source makes the sample secondary) ----
+
+    function test_notCollapsibleStaysFullyOpenLikeBefore() {
+        ready(fixture(10, 20))
+        verify(!preview.collapsed)
+        verify(child("aiCsvPreviewTitle").visible)
+        verify(child("aiCsvPreviewCount").visible)
+        compare(child("aiCsvPreviewSummary").visible, false)
+        verify(child("aiCsvPreviewScroll") !== null)
+        verify(!child("aiCsvPreviewToggle").visible)
+    }
+
+    function test_collapsibleStartsAsOneSummaryLineWithAToggle() {
+        var data = fixture(10, 20)
+        data.totalRows = null
+        preview.collapsible = true
+        ready(data)
+        verify(preview.collapsed)
+        compare(child("aiCsvPreviewSummary").text, "CSV preview · 10 of unknown rows · 20 of 20 columns")
+        compare(child("aiCsvPreviewSummary").textFormat, Text.PlainText)
+        verify(child("aiCsvPreviewSummary").color.a >= 0.76)
+        verify(!child("aiCsvPreviewTitle").visible, "the summary carries the title")
+        tryVerify(function() { return child("aiCsvPreviewScroll") === null }, 1000, "no grid while collapsed")
+        compare(child("aiCsvPreviewCells"), null)
+        compare(child("aiCsvPreviewType0"), null)
+        compare(child("aiCsvPreviewFooter"), null)
+        compare(child("aiCsvPreviewDisclosure"), null)
+        compare(child("aiCsvPreviewTypeNote"), null)
+        var toggle = child("aiCsvPreviewToggle")
+        verify(toggle.visible && toggle.enabled)
+        compare(toggle.text, "Show")
+        compare(toggle.Accessible.name, "CSV preview, collapsed")
+        verify(toggle.Accessible.description.length > 0)
+        compare(toggle.focusPolicy, Qt.StrongFocus)
+        verify(preview.implicitHeight <= 40, "one line, got " + preview.implicitHeight)
+    }
+
+    function test_toggleShowsAndHidesByKeyboardAndMouseKeepingTypeCorrectionReachable() {
+        preview.collapsible = true
+        ready(typesFixture())
+        var toggle = child("aiCsvPreviewToggle")
+        var collapsedHeight = preview.implicitHeight
+        toggle.forceActiveFocus(Qt.TabFocusReason)
+        tryCompare(toggle, "activeFocus", true)
+        keyClick(Qt.Key_Space)
+        tryVerify(function() { return child("aiCsvPreviewViewport") !== null })
+        verify(!preview.collapsed)
+        compare(child("aiCsvPreviewToggle").text, "Hide")
+        compare(child("aiCsvPreviewToggle").Accessible.name, "CSV preview, expanded")
+        tryVerify(function() { return preview.implicitHeight > collapsedHeight + 150 })
+        verify(!child("aiCsvPreviewCount").visible, "the summary already carries the count")
+        verify(child("aiCsvPreviewSummary").visible)
+        verify(typeButton(1) !== null, "type correction is reachable once shown")
+        tryCompare(child("aiCsvPreviewToggle"), "activeFocus", true)
+        // Tab order: toggle -> grid viewport -> the one badge stop.
+        keyClick(Qt.Key_Tab)
+        tryCompare(child("aiCsvPreviewViewport"), "activeFocus", true)
+        keyClick(Qt.Key_Tab)
+        tryCompare(typeButton(0), "activeFocus", true)
+        keyClick(Qt.Key_Right)
+        keyClick(Qt.Key_Down)
+        var menu = child("aiCsvPreviewTypeMenu")
+        tryCompare(menu, "opened", true)
+        compare(menu.column, 1)
+        menu.itemAt(0).triggered()
+        compare(chosenSpy.signalArguments[0][1], "number")
+        tryCompare(menu, "opened", false)
+        // Hide again with the mouse; focus stays on the toggle.
+        toggle = child("aiCsvPreviewToggle")
+        mouseClick(toggle, toggle.width / 2, toggle.height / 2)
+        verify(preview.collapsed)
+        tryVerify(function() { return child("aiCsvPreviewViewport") === null })
+        compare(child("aiCsvPreviewToggle").text, "Show")
+        tryCompare(preview, "implicitHeight", collapsedHeight)
+    }
+
+    function test_collapsedSummaryDisclosesCorrectionsThatStillReachTheModel() {
+        preview.collapsible = true
+        ready(typesFixture())
+        compare(child("aiCsvPreviewSummary").text, "CSV preview · 3 of 3 rows · 6 of 6 columns")
+        preview.typeOverrides = ["", "", "", "number", "", "date"]
+        compare(child("aiCsvPreviewSummary").text,
+            "CSV preview · 3 of 3 rows · 6 of 6 columns · 2 corrected")
+        compare(child("aiCsvPreviewType3"), null)
+    }
+
+    function test_leavingCollapsibleForgetsTheOpenChoiceAndReopensFully() {
+        preview.collapsible = true
+        ready(typesFixture())
+        preview.detailOpen = true
+        tryVerify(function() { return child("aiCsvPreviewViewport") !== null })
+        preview.collapsible = false
+        verify(!preview.detailOpen)
+        verify(child("aiCsvPreviewViewport") !== null, "no source: fully open as before")
+        verify(child("aiCsvPreviewCount").visible)
+        preview.collapsible = true
+        verify(preview.collapsed, "back to the collapsed default")
+        tryVerify(function() { return child("aiCsvPreviewViewport") === null })
+    }
+
+    function test_collapsedErrorAndLoadingStatesAreUnaffected() {
+        preview.collapsible = true
+        preview.status = "loading"
+        waitForRendering(preview)
+        verify(child("aiCsvPreviewTitle").visible)
+        verify(child("aiCsvPreviewLoading").visible)
+        preview.status = "error"
+        preview.error = "CSV attachment is empty."
+        waitForRendering(preview)
+        verify(child("aiCsvPreviewTitle").visible)
+        verify(child("aiCsvPreviewRetry").visible)
+        compare(child("aiCsvPreviewToggle"), null)
     }
 }

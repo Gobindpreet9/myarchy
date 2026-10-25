@@ -15,6 +15,9 @@ FocusScope {
     property bool loading: false
     property bool attachmentBlocked: false
     property bool hasConversation: false
+    // The part of the latest answer the next question is about ("" = none).
+    // The host owns it (AiService.focusLabel) and clears it on `focusCleared`.
+    property string focusLabel: ""
     // The detached workspace window hides the back-to-apps affordance.
     property bool showBackButton: true
     readonly property bool activeInputFocus: promptInput.activeFocus
@@ -28,10 +31,13 @@ FocusScope {
     signal hideRequested()
     signal backToApps()
     signal stopRequested()
+    // The person dismissed the "About: ..." chip (its x control or Esc).
+    signal focusCleared()
 
-    // Grows with the field so the card frame and sender read naturally.
+    // Grows with the field (and the optional chip above it) so the card frame
+    // and sender read naturally.
     implicitWidth: 660
-    implicitHeight: promptField.y * 2 + promptField.height
+    implicitHeight: promptField.y + promptField.height + 8
 
     function focusPrompt() {
         promptInput.forceActiveFocus(Qt.OtherFocusReason)
@@ -71,9 +77,79 @@ FocusScope {
         }
     }
 
+    // Escape peels the "About: ..." chip first (the draft stays), and only a
+    // second Escape asks the host to hide; with no chip it is unchanged.
     Keys.onEscapePressed: function(event) {
-        composer.hideRequested()
+        if (composer.focusLabel.length > 0) composer.focusCleared()
+        else composer.hideRequested()
         event.accepted = true
+    }
+
+    // "About: <label>  x" above the field. The whole pill is one mouse /
+    // accessibility-action button; it is not a Tab stop (Esc is the keyboard
+    // path), so it adds nothing to the composer's focus ring.
+    Item {
+        id: focusChip
+        objectName: "aiComposerFocusChip"
+        visible: composer.focusLabel.length > 0
+        x: promptField.x
+        y: 8
+        width: promptField.width
+        height: visible ? 30 : 0
+
+        Button {
+            id: chipButton
+            objectName: "aiComposerFocusClear"
+            readonly property string shown: qsTr("About: ") + composer.focusLabel
+            width: Math.min(parent.width, chipText.implicitWidth + clearGlyph.width + 3 * Satin.space.tip)
+            height: 28
+            padding: 0
+            hoverEnabled: true
+            focusPolicy: Qt.NoFocus
+            activeFocusOnTab: false
+            Accessible.role: Accessible.Button
+            Accessible.name: qsTr("Asking about ") + composer.focusLabel + qsTr(", clear")
+            Accessible.description: qsTr("Remove the part this question is about. Escape does the same.")
+            onClicked: {
+                composer.focusCleared()
+                composer.focusPrompt()
+            }
+            background: Rectangle {
+                radius: Satin.radius.chip
+                color: Qt.alpha(composer.accent, chipButton.down ? 0.26 : chipButton.hovered ? 0.18 : 0.12)
+                border.width: 1
+                border.color: Qt.alpha(composer.accent, 0.5)
+            }
+            contentItem: Item {
+                Text {
+                    id: chipText
+                    anchors.left: parent.left
+                    anchors.leftMargin: Satin.space.tip
+                    anchors.right: clearGlyph.left
+                    anchors.rightMargin: Satin.space.base
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: chipButton.shown
+                    textFormat: Text.PlainText
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                    color: Qt.alpha(composer.foreground, 0.90)
+                    font.pixelSize: Satin.type.meta
+                    font.weight: Font.Medium
+                }
+                Text {
+                    id: clearGlyph
+                    anchors.right: parent.right
+                    anchors.rightMargin: Satin.space.tip
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 14
+                    text: "\u00d7"
+                    textFormat: Text.PlainText
+                    horizontalAlignment: Text.AlignHCenter
+                    color: Qt.alpha(composer.foreground, 0.90)
+                    font.pixelSize: Satin.type.name
+                }
+            }
+        }
     }
 
     Button {
@@ -81,7 +157,7 @@ FocusScope {
         objectName: "aiComposerBack"
         visible: composer.showBackButton
         x: 8
-        anchors.verticalCenter: parent.verticalCenter
+        y: promptField.y + (promptField.height - height) / 2
         width: 32
         height: 32
         padding: 0
@@ -111,7 +187,7 @@ FocusScope {
     Item {
         id: promptField
         x: backButton.visible ? 48 : 8
-        y: 8
+        y: 8 + (focusChip.visible ? focusChip.height + Satin.space.tip : 0)
         width: Math.max(0, parent.width - x - 8)
         // Grow the viewport, not the editor: longer drafts scroll natively and
         // TextArea.flickable keeps the caret visible during editing/navigation.
@@ -145,9 +221,11 @@ FocusScope {
                 bottomPadding: 5
                 rightPadding: (stopButton.visible ? stopButton.width : sendButton.visible ? sendButton.width : 0) + 16
                 text: composer.prompt
-                placeholderText: composer.hasConversation ? "Ask a follow-up" : "Ask anything"
+                placeholderText: composer.focusLabel.length > 0
+                    ? "Ask about " + (composer.focusLabel.length > 48 ? composer.focusLabel.slice(0, 47) + "\u2026" : composer.focusLabel) + "\u2026"
+                    : composer.hasConversation ? "Ask a follow-up" : "Ask anything"
                 color: composer.foreground
-                placeholderTextColor: Qt.alpha(composer.foreground, 0.58)
+                placeholderTextColor: Qt.alpha(composer.foreground, 0.76)
                 selectionColor: Qt.alpha(composer.accent, 0.35)
                 selectedTextColor: composer.foreground
                 font.pixelSize: Satin.type.search
@@ -158,6 +236,7 @@ FocusScope {
                 inputMethodHints: Qt.ImhMultiLine | Qt.ImhNoAutoUppercase | Qt.ImhPreferLowercase
                     | Qt.ImhNoPredictiveText
                 Accessible.name: "AI prompt"
+                Accessible.description: composer.focusLabel.length > 0 ? "Asking about " + composer.focusLabel : ""
                 // Suppress the QQC2 style's default box; the fixed frame is above.
                 background: null
                 Keys.onPressed: function(event) {

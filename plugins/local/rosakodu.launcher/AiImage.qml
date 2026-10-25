@@ -114,7 +114,7 @@ Column {
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             horizontalAlignment: Text.AlignHCenter
-            color: root.alpha(root.foreground, 0.72)
+            color: root.alpha(root.foreground, 0.76)
             font.pixelSize: Satin.type.meta
             Accessible.name: text
         }
@@ -148,7 +148,7 @@ Column {
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
                 font.pixelSize: Satin.type.meta
-                color: root.alpha(root.foreground, credit.enabled ? 0.66 : 0.5)
+                color: root.alpha(root.foreground, credit.enabled ? 0.76 : 0.5)
             }
             background: Rectangle {
                 radius: Satin.radius.chip
@@ -238,7 +238,7 @@ Column {
                     Accessible.name: qsTr("Close photo credit")
                     contentItem: Text {
                         text: closeCredit.text
-                        color: root.alpha(root.foreground, 0.72)
+                        color: root.alpha(root.foreground, 0.76)
                         font.pixelSize: Satin.type.search
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
@@ -390,7 +390,7 @@ Column {
                         Accessible.name: qsTr("Close the image viewer")
                         contentItem: Text {
                             text: closeViewer.text
-                            color: root.alpha(root.foreground, 0.72)
+                            color: root.alpha(root.foreground, 0.76)
                             font.pixelSize: Satin.type.search
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -456,7 +456,7 @@ Column {
                 wrapMode: Text.Wrap
                 maximumLineCount: 2
                 elide: Text.ElideRight
-                color: root.alpha(root.foreground, 0.6)
+                color: root.alpha(root.foreground, 0.76)
                 font.pixelSize: Satin.type.label
             }
         }

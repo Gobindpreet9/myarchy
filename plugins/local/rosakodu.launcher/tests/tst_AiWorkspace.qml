@@ -15,11 +15,45 @@ TestCase {
     when: windowShown
     property string query: "ai: "
 
+    function test_namedDetachedWorkspaceGatesSendButPreservesDraftEditing() {
+        var probe = createTemporaryObject(detachedProbe, tests)
+        verify(probe !== null)
+        var input = findChild(probe, "aiComposerInput")
+        var composer = findChild(probe, "detachedProbeComposer")
+        var send = findChild(probe, "aiComposerSend")
+        try {
+            detachedService.workspaceDisplayTitle = "Illustrative laptop tool"
+            detachedService.workspaceName = detachedService.workspaceDisplayTitle
+            compare(findChild(probe, "detachedProbeTitle").text, detachedService.workspaceDisplayTitle)
+            verify(findChild(probe, "detachedProbePane").visible, "Named empty copies retain their toolbar")
+            detachedService.draft = "My draft"
+            detachedService.workspaceActionPending = true
+            verify(composer.enabled && !composer.canSubmit && !send.enabled)
+            input.forceActiveFocus()
+            keyClick(Qt.Key_End)
+            keyClick(Qt.Key_X)
+            verify(detachedService.draft.indexOf("x") >= 0, "Pending saves still accept draft edits")
+            keyClick(Qt.Key_Return)
+            keyClick(Qt.Key_Enter)
+            compare(detachedService.submitCalls, 0, "Both Enter keys respect the action gate")
+            detachedService.workspaceTransitionPending = true
+            verify(!composer.enabled, "Final hydration does not accept edits to the outgoing workspace")
+        } finally {
+            detachedService.workspaceTransitionPending = false
+            detachedService.workspaceActionPending = false
+            detachedService.workspaceName = ""
+            detachedService.workspaceDisplayTitle = "New workspace"
+            detachedService.draft = ""
+            detachedService.submitCalls = 0
+        }
+    }
+
     function test_restoreHintKeepsTheInitialPaneVisible() {
         var loading = {turns: [], attachment: "", loadingLatest: true}
         verify(AiLayout.paneVisible(true, loading))
         verify(!AiLayout.paneVisible(false, loading))
         verify(!AiLayout.paneVisible(true, {turns: [], attachment: "", loadingLatest: false}))
+        verify(AiLayout.paneVisible(true, {turns: [], attachment: "", loadingLatest: false, workspaceName: "Saved empty copy"}))
         compare(AiLayout.idleCardHeight(false, 60, 40), 140,
                 "The initial card reserves measured loading chrome")
     }
@@ -59,6 +93,11 @@ TestCase {
         property bool busy: false
         property bool stopping: false
         property bool loadingLatest: false
+        property bool workspaceActionPending: false
+        property bool workspaceTransitionPending: false
+        property string workspaceDisplayTitle: "New workspace"
+        property string workspaceName: ""
+        property int submitCalls: 0
         property bool attachmentBlocked: false
         property bool canContinue: false
         property bool windowActive: false
@@ -69,13 +108,17 @@ TestCase {
         property string previewStatus: "idle"
         property var previewData: null
         property string previewError: ""
+        // A ready, unkept CSV offers the explicit "Keep full data" action.
+        property bool keepOffered: true
+        property bool canKeepFullData: true
+        function keepFullData() { }
         property var checklistStates: ({})
         property var turns: []
         property var uiStates: ({})
         property alias turnModel: detachedTurnModel
         readonly property var latest: turns.length ? turns[turns.length - 1] : null
         function retryAttachmentPreview() { }
-        function submit() { }
+        function submit() { ++submitCalls }
         function stop() { }
         function newConversation() { turns = [] }
     }
@@ -101,7 +144,7 @@ TestCase {
                     id: probeTitle
                     objectName: "detachedProbeTitle"
                     Layout.fillWidth: true
-                    text: "New workspace"
+                    text: detachedService.workspaceDisplayTitle
                     textFormat: Text.PlainText
                     // Mirror WorkspaceWindow's title exactly (Satin token,
                     // not a hardcoded size) so the replica floor cannot drift
@@ -122,10 +165,12 @@ TestCase {
                     prompt: detachedService.draft
                     busy: detachedService.busy
                     stopping: detachedService.stopping
-                    loading: detachedService.loadingLatest
+                    loading: detachedService.loadingLatest || detachedService.workspaceActionPending
+                    enabled: !detachedService.workspaceTransitionPending
                     attachmentBlocked: detachedService.attachmentBlocked
                     hasConversation: detachedService.turns.length > 0
                     onEdited: function(text) { detachedService.draft = text }
+                    onSubmitted: detachedService.submit()
                     onStopRequested: detachedService.stop()
                 }
                 Launcher.AiPane {
@@ -133,8 +178,7 @@ TestCase {
                     objectName: "detachedProbePane"
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    visible: detachedService.turns.length > 0 || !!detachedService.attachment
-                        || detachedService.loadingLatest
+                    visible: AiLayout.paneVisible(true, detachedService)
                     allowExpand: false
                     allowOpenWindow: false
                     service: detachedService
@@ -291,8 +335,8 @@ TestCase {
         wait(150)
         verify(probe.floor > 560,
             "Full disclosures plus a capped long draft must raise the measured floor")
-        verify(probe.floor >= 660 && probe.floor <= 680,
-            "Measured floor stays in the pinned band (real window: 669 at width 720), got " + probe.floor)
+        verify(probe.floor >= 735 && probe.floor <= 780,
+            "Measured floor covers both system-font metrics (745/757); exact disclosure containment is checked below, got " + probe.floor)
         compare(probe.height, probe.floor, "The column is sized by its floor, not a fixed 560px")
 
         var disclosure = findChild(probe, "aiCsvPreviewDisclosure")
@@ -300,6 +344,10 @@ TestCase {
         var bottom = disclosure.mapToItem(probe, 0, disclosure.height).y
         verify(bottom <= probe.height,
             "Disclosure bottom " + bottom + " must fit in the floor height " + probe.height)
+        var keepNote = findChild(probe, "aiCsvPreviewKeepNote")
+        verify(keepNote !== null && keepNote.visible)
+        verify(keepNote.mapToItem(probe, 0, keepNote.height).y <= probe.height,
+            "The Keep full data disclosure must fit in the floor height")
         var loader = findChild(probe, "aiCsvPreviewLoader")
         verify(loader !== null)
         var loaderBottom = loader.mapToItem(probe, 0, loader.height).y

@@ -5,6 +5,7 @@ import QtQuick.Controls
 import "SatinGlass.js" as Satin
 import "AiState.js" as AiState
 import "AiFormula.js" as Formula
+import "AiScroll.js" as Scroll
 
 // Eager native delegates deliberately survive Flickable scrolling. Replacing
 // blocks starts a new result (and therefore resets local checklist state).
@@ -14,13 +15,40 @@ Column {
     property var blocks: []
     // Filtered editorial layouts retain indexes used by persistent checklists.
     property var blockIndices: []
+    // A task layout may place the diagram and its control in different columns.
+    // Resolve bindings against the WHOLE answer, not just this group's blocks.
+    property var contextBlocks: []
+    property var contextBlockIndices: []
     property string suppressedTitle: ""
     property string mediaRoot: ""
     property var checkedState: null
     // Per-turn interaction state (step index, check selections, predictions).
     property var uiState: null
+    property bool calcCanDuplicate: true
+    property string calcDuplicateHint: ""
     signal checkChanged(int blockIndex, int itemIndex, bool checked)
     signal uiStateEdited(int blockIndex, string key, var value)
+    // A calc block asked for clipboard text / a standalone duplicate (user-initiated).
+    signal copyTextRequested(string text)
+    signal duplicateCalcRequested(var baked)
+    // A form block asked to be sent (original block index; user-initiated).
+    signal formSubmitRequested(int blockIndex)
+    // The host's gate for sending a form (latest answer, idle service) and why not.
+    property bool formCanSubmit: false
+    property string formHint: ""
+    // A picked option of an actions/compare block (ORIGINAL block index, the
+    // block's own type, option index; user-initiated), and the host's gate for
+    // it (latest finished answer, idle service) with the reason when closed.
+    signal choiceRequested(int blockIndex, string kind, int index)
+    property bool choiceCanSubmit: false
+    property string choiceHint: ""
+    // A part of a block the person wants to ask about (index -1 = the block).
+    signal focusRequested(int blockIndex, string kind, int index, string label, string detail)
+    // The host's gate for pointing a question at a part ("Ask" on a table row,
+    // gallery tile, diagram node, step or chart point): the latest finished
+    // answer on an idle service, in the interface (not text) view. Closed, the
+    // per-part controls and their `?` key do not exist.
+    property bool canFocus: false
     signal openUrl(string url)
     required property color foreground
     required property color background
@@ -31,11 +59,13 @@ Column {
     // slider's current value and override the diagram part's base fields.
     readonly property var diagramLinks: {
         var result = {}, slider = null, sliderIndex = -1;
-        for (var i = 0; i < root.blocks.length; ++i) {
-            var candidate = root.blocks[i];
+        var blocks = root.contextBlocks.length ? root.contextBlocks : root.blocks;
+        var indices = root.contextBlocks.length ? root.contextBlockIndices : root.blockIndices;
+        for (var i = 0; i < blocks.length; ++i) {
+            var candidate = blocks[i];
             if (candidate && candidate.type === "slider") {
                 slider = candidate;
-                sliderIndex = root.blockIndices.length > i ? root.blockIndices[i] : i;
+                sliderIndex = indices.length > i ? indices[i] : i;
                 break;
             }
         }
@@ -55,6 +85,13 @@ Column {
 
     function alpha(color, opacity) {
         return Qt.rgba(color.r, color.g, color.b, opacity);
+    }
+
+    // The option already picked on a block (`act:<blockIndex>` = {picked}), -1 none.
+    function pickedOf(blockIndex) {
+        var entry = root.uiState ? root.uiState["act:" + blockIndex] : undefined;
+        var value = entry && typeof entry === "object" ? entry.picked : undefined;
+        return typeof value === "number" && value === Math.floor(value) && value >= 0 ? value : -1;
     }
 
     Repeater {
@@ -104,6 +141,11 @@ Column {
                     case "predict": return predictComponent;
                     case "diagram": return diagramComponent;
                     case "slider": return sliderComponent;
+                    case "calc": return calcComponent;
+                    case "form": return formComponent;
+                    case "actions": return actionsComponent;
+                    case "compare": return compareComponent;
+                    case "timeline": return timelineComponent;
                     case "sources": return sourcesComponent;
                     default: return null;
                     }
@@ -138,10 +180,12 @@ Column {
             blockIndex: host.blockIndex
             uiState: root.uiState
             mediaRoot: root.mediaRoot
+            canFocus: root.canFocus
             foreground: root.foreground
             background: root.background
             accent: root.accent
             onUiStateEdited: (key, value) => root.uiStateEdited(blockIndex, key, value)
+            onFocusRequested: (index, label, detail) => root.focusRequested(blockIndex, "gallery", index, label, detail)
             onOpenUrl: url => root.openUrl(url)
         }
     }
@@ -151,10 +195,14 @@ Column {
         AiChart {
             readonly property var host: parent
             block: host.block
+            // Only the plain `chart` block is a focus kind (a `market` block is
+            // not: the service requires kind === the block's own type).
+            canFocus: root.canFocus && host.block.type === "chart"
             foreground: root.foreground
             background: root.background
             accent: root.accent
             onOpenUrl: url => root.openUrl(url)
+            onFocusRequested: (index, label, detail) => root.focusRequested(host.blockIndex, "chart", index, label, detail)
         }
     }
 
@@ -341,6 +389,14 @@ Column {
                 if (index < 0 || index >= steps.length || index === current) return;
                 root.uiStateEdited(blockIndex, "step:" + blockIndex, index);
             }
+            // "Ask about this step": descriptors exist only while the host's
+            // gate is open; the step buttons are already Tab stops, so the
+            // keyboard path is `?` on the focused step (no extra stop).
+            readonly property var askParts: root.canFocus ? AiState.askParts(block) : []
+            function askAbout(index) {
+                var part = root.canFocus && index >= 0 && index < askParts.length ? askParts[index] : null;
+                if (part) root.focusRequested(blockIndex, "steps", part.index, part.label, part.detail);
+            }
 
             Repeater {
                 model: stepsView.steps
@@ -349,12 +405,34 @@ Column {
                     required property var modelData
                     required property int index
                     objectName: "aiStep_" + stepsView.blockIndex + "_" + index
+                    readonly property bool askable: root.canFocus && index < stepsView.askParts.length
+                        && stepsView.askParts[index] !== null
                     width: stepsView.width
                     padding: Satin.space.tip
                     activeFocusOnTab: true
                     Accessible.name: (index + 1) + ". " + modelData.label
                     Accessible.description: modelData.detail || ""
                     onClicked: stepsView.choose(index)
+                    Keys.onPressed: function(event) {
+                        if (stepRow.askable && (event.key === Qt.Key_Question || event.text === "?")) {
+                            stepsView.askAbout(stepRow.index);
+                            event.accepted = true;
+                        }
+                    }
+                    HoverHandler { id: stepHover }
+                    AiAskButton {
+                        objectName: "aiStepAsk_" + stepsView.blockIndex + "_" + stepRow.index
+                        z: 2
+                        anchors.right: parent.right
+                        anchors.rightMargin: Satin.space.base
+                        anchors.verticalCenter: parent.verticalCenter
+                        visible: stepRow.askable && (stepHover.hovered || stepRow.activeFocus || hovered)
+                        subject: stepRow.askable ? stepsView.askParts[stepRow.index].label : ""
+                        foreground: root.foreground
+                        surface: root.background
+                        accent: root.accent
+                        onClicked: stepsView.askAbout(stepRow.index)
+                    }
                     contentItem: Row {
                         spacing: Satin.space.gutter
                         Rectangle {
@@ -373,7 +451,8 @@ Column {
                             }
                         }
                         Text {
-                            width: Math.max(0, stepRow.width - Satin.type.search - Satin.space.gutter - stepRow.padding * 2)
+                            width: Math.max(0, stepRow.width - Satin.type.search - Satin.space.gutter - stepRow.padding * 2
+                                - (stepRow.askable ? 52 : 0))
                             text: stepRow.modelData.label
                             textFormat: Text.PlainText
                             color: root.foreground
@@ -418,7 +497,7 @@ Column {
                     anchors.verticalCenter: parent.verticalCenter
                     text: stepsView.steps.length > 0 ? "Step " + (stepsView.current + 1) + " of " + stepsView.steps.length : ""
                     textFormat: Text.PlainText
-                    color: root.alpha(root.foreground, 0.6)
+                    color: root.alpha(root.foreground, 0.76)
                     font.pixelSize: Satin.type.meta
                 }
                 AiButton {
@@ -684,10 +763,12 @@ Column {
                 var value = root.uiState ? root.uiState["diagram:" + blockIndex] : undefined;
                 return typeof value === "number" && value >= 0 ? value : -1;
             }
+            canFocus: root.canFocus
             foreground: root.foreground
             background: root.background
             accent: root.accent
             onPartSelected: partIndex => root.uiStateEdited(blockIndex, "diagram:" + blockIndex, partIndex)
+            onFocusRequested: (index, label, detail) => root.focusRequested(blockIndex, "diagram", index, label, detail)
         }
     }
 
@@ -710,6 +791,97 @@ Column {
     }
 
     Component {
+        id: calcComponent
+        AiCalc {
+            readonly property var host: parent
+            block: host.block
+            blockIndex: host.blockIndex
+            saved: root.uiState ? root.uiState["calc:" + blockIndex] : undefined
+            canDuplicate: root.calcCanDuplicate
+            duplicateHint: root.calcDuplicateHint
+            foreground: root.foreground
+            background: root.background
+            accent: root.accent
+            onStateEdited: edited => root.uiStateEdited(blockIndex, "calc:" + blockIndex, edited)
+            onCopyRequested: text => root.copyTextRequested(text)
+            onDuplicateRequested: baked => root.duplicateCalcRequested(baked)
+        }
+    }
+
+    Component {
+        id: formComponent
+        AiForm {
+            readonly property var host: parent
+            block: host.block
+            blockIndex: host.blockIndex
+            saved: root.uiState ? root.uiState["form:" + blockIndex] : undefined
+            canSubmit: root.formCanSubmit
+            submitHint: root.formHint
+            foreground: root.foreground
+            background: root.background
+            accent: root.accent
+            onStateEdited: edited => root.uiStateEdited(blockIndex, "form:" + blockIndex, edited)
+            onSubmitRequested: root.formSubmitRequested(blockIndex)
+        }
+    }
+
+    Component {
+        id: actionsComponent
+        AiActions {
+            readonly property var host: parent
+            block: host.block
+            blockIndex: host.blockIndex
+            // An open host gate also permits retrying a failed/stopped pick.
+            // Keep the recorded pick on disk without locking out that retry.
+            picked: root.choiceCanSubmit ? -1 : root.pickedOf(blockIndex)
+            canChoose: root.choiceCanSubmit
+            chooseHint: root.choiceHint
+            foreground: root.foreground
+            background: root.background
+            accent: root.accent
+            onChoiceRequested: index => root.choiceRequested(blockIndex, "actions", index)
+            canFocus: root.canFocus
+            onFocusRequested: (index, label, detail) => root.focusRequested(blockIndex, "actions", index, label, detail)
+        }
+    }
+
+    Component {
+        id: compareComponent
+        AiCompare {
+            readonly property var host: parent
+            block: host.block
+            blockIndex: host.blockIndex
+            picked: root.pickedOf(blockIndex)
+            canChoose: root.choiceCanSubmit
+            chooseHint: root.choiceHint
+            saved: root.uiState ? root.uiState["compare:" + blockIndex] : undefined
+            foreground: root.foreground
+            background: root.background
+            accent: root.accent
+            onChoiceRequested: index => root.choiceRequested(blockIndex, "compare", index)
+            onStateEdited: edited => root.uiStateEdited(blockIndex, "compare:" + blockIndex, edited)
+            canFocus: root.canFocus
+            onFocusRequested: (index, label, detail) => root.focusRequested(blockIndex, "compare", index, label, detail)
+        }
+    }
+
+    Component {
+        id: timelineComponent
+        AiTimeline {
+            readonly property var host: parent
+            block: host.block
+            blockIndex: host.blockIndex
+            saved: root.uiState ? root.uiState["plan:" + blockIndex] : undefined
+            foreground: root.foreground
+            background: root.background
+            accent: root.accent
+            onStateEdited: edited => root.uiStateEdited(blockIndex, "plan:" + blockIndex, edited)
+            canFocus: root.canFocus
+            onFocusRequested: (index, label, detail) => root.focusRequested(blockIndex, "timeline", index, label, detail)
+        }
+    }
+
+    Component {
         id: tableComponent
         Column {
             id: table
@@ -718,7 +890,7 @@ Column {
             property int blockIndex: host.blockIndex
             readonly property int columnCount: block.columns.length
             readonly property real cellWidth: columnCount > 0
-                ? Math.max(0, (width - (columnCount - 1) * Satin.space.gutter) / columnCount) : 0
+                ? Math.max(0, (width - (root.canFocus ? 52 : 0) - (columnCount - 1) * Satin.space.gutter) / columnCount) : 0
             // Local comparison tools: a header click cycles asc/desc/off and
             // the filter narrows rows. Both live in the turn's persisted state,
             // so a reopened workspace keeps the user's arrangement.
@@ -726,7 +898,9 @@ Column {
             readonly property int sortColumn: tableState && typeof tableState.sort === "number" ? tableState.sort : -1
             readonly property int sortDir: tableState && tableState.dir === -1 ? -1 : 1
             readonly property string filterText: tableState && typeof tableState.filter === "string" ? tableState.filter : ""
-            readonly property var viewRows: {
+            // Rows in view order, each with its position in the AUTHORED list
+            // (`origin`): the sort/filter never changes which row a person means.
+            readonly property var viewEntries: {
                 var rows = [];
                 var list = block.rows || [];
                 var needle = filterText.toLowerCase();
@@ -737,20 +911,33 @@ Column {
                         for (var j = 0; j < row.length; ++j) joined += String(row[j] === undefined ? "" : row[j]) + "\u0001";
                         if (joined.toLowerCase().indexOf(needle) < 0) continue;
                     }
-                    rows.push(row);
+                    rows.push({row: row, origin: i});
                 }
                 if (sortColumn >= 0 && sortColumn < columnCount) {
                     var column = sortColumn;
                     rows.sort(function(a, b) {
-                        var x = String(a[column] === undefined ? "" : a[column]);
-                        var y = String(b[column] === undefined ? "" : b[column]);
+                        var x = String(a.row[column] === undefined ? "" : a.row[column]);
+                        var y = String(b.row[column] === undefined ? "" : b.row[column]);
                         var nx = Number(x), ny = Number(y);
                         var result = (x.length && y.length && isFinite(nx) && isFinite(ny))
                             ? nx - ny : x.localeCompare(y);
-                        return result * sortDir;
+                        return result * sortDir || (a.origin - b.origin);
                     });
                 }
                 return rows;
+            }
+            readonly property var viewRows: viewEntries.map(function(entry) { return entry.row; })
+            // "Ask about this row": descriptors only while the host's gate is
+            // open (see AiBlocks.canFocus), indexed by the authored row.
+            readonly property var askParts: root.canFocus ? AiState.askParts(block) : []
+            function askPartAt(viewIndex) {
+                if (!root.canFocus || viewIndex < 0 || viewIndex >= viewEntries.length) return null;
+                var origin = viewEntries[viewIndex].origin;
+                return origin < askParts.length ? askParts[origin] : null;
+            }
+            function askAbout(viewIndex) {
+                var part = askPartAt(viewIndex);
+                if (part) root.focusRequested(blockIndex, "table", part.index, part.label, part.detail);
             }
             function setState(sort, dir, filter) {
                 root.uiStateEdited(blockIndex, "table:" + blockIndex,
@@ -812,7 +999,7 @@ Column {
                 selectByMouse: true
                 activeFocusOnTab: true
                 color: root.foreground
-                placeholderTextColor: root.alpha(root.foreground, 0.55)
+                placeholderTextColor: root.alpha(root.foreground, 0.76)
                 selectionColor: root.alpha(root.accent, 0.35)
                 selectedTextColor: root.foreground
                 font.pixelSize: Satin.type.meta
@@ -830,28 +1017,102 @@ Column {
                 visible: table.filterText.length > 0
                 text: table.viewRows.length + qsTr(" of ") + (table.block.rows || []).length + qsTr(" rows")
                 textFormat: Text.PlainText
-                color: root.alpha(root.foreground, 0.6)
+                color: root.alpha(root.foreground, 0.76)
                 font.pixelSize: Satin.type.label
             }
-            Repeater {
-                model: table.viewRows
-                delegate: Row {
-                    id: tableRow
-                    required property var modelData
-                    required property int index
-                    objectName: "aiTableRow_" + index
-                    width: table.width
-                    spacing: Satin.space.gutter
-                    Repeater {
-                        model: table.columnCount
-                        delegate: Text {
-                            required property int index
-                            width: table.cellWidth
-                            text: tableRow.modelData[index] || ""
-                            textFormat: Text.PlainText
-                            wrapMode: Text.Wrap
-                            color: root.foreground
-                            font.pixelSize: Satin.type.meta
+            // The body is ONE Tab stop while the Ask gate is open (never one
+            // per row): Up/Down/Home/End move the row cursor, `?` asks about
+            // it. Closed, it is not focusable and looks exactly as before.
+            Column {
+                id: tableBody
+                objectName: "aiTableRows"
+                width: table.width
+                spacing: Satin.space.tip
+                property int cursor: 0
+                readonly property int current: Math.max(0, Math.min(cursor, table.viewEntries.length - 1))
+                // Always a Tab stop, but DISABLED (skipped, and focus released)
+                // while the gate is closed or there is no row: Qt refuses to
+                // switch activeFocusOnTab off while the item holds focus.
+                activeFocusOnTab: true
+                enabled: root.canFocus && table.viewEntries.length > 0
+                Accessible.role: root.canFocus ? Accessible.List : Accessible.NoRole
+                Accessible.name: root.canFocus ? qsTr("Table rows") : ""
+                Accessible.description: root.canFocus
+                    ? qsTr("Up and Down choose a row; press ? to ask about the chosen row.") : ""
+                Keys.onPressed: function(event) {
+                    if (!root.canFocus || table.viewEntries.length === 0) return;
+                    var last = table.viewEntries.length - 1, at = tableBody.current, to = at;
+                    if (event.key === Qt.Key_Question || event.text === "?") {
+                        table.askAbout(at);
+                        event.accepted = true;
+                        return;
+                    }
+                    if (event.key === Qt.Key_Down) to = Math.min(last, at + 1);
+                    else if (event.key === Qt.Key_Up) to = Math.max(0, at - 1);
+                    else if (event.key === Qt.Key_Home) to = 0;
+                    else if (event.key === Qt.Key_End) to = last;
+                    else return;
+                    // At either end the key is NOT taken, so the pane still scrolls.
+                    if (to === at) return;
+                    tableBody.cursor = to;
+                    var row = tableRows.itemAt(to);
+                    if (row) Scroll.reveal(row, 0, 0, row.width, row.height);
+                    event.accepted = true;
+                }
+                Repeater {
+                    id: tableRows
+                    model: table.viewRows
+                    delegate: Item {
+                        id: rowHost
+                        required property var modelData
+                        required property int index
+                        width: table.width
+                        implicitHeight: tableRow.implicitHeight
+                        height: implicitHeight
+                        readonly property var askPart: root.canFocus ? table.askPartAt(index) : null
+                        readonly property bool cursorHere: tableBody.activeFocus && tableBody.current === index
+                        Rectangle {
+                            visible: rowHost.cursorHere
+                            anchors.fill: parent
+                            anchors.margins: -2
+                            radius: Satin.radius.chip
+                            color: root.alpha(root.accent, 0.10)
+                            border.width: 2
+                            border.color: root.accent
+                        }
+                        Row {
+                            id: tableRow
+                            objectName: "aiTableRow_" + rowHost.index
+                            width: table.width
+                            spacing: Satin.space.gutter
+                            Repeater {
+                                model: table.columnCount
+                                delegate: Text {
+                                    required property int index
+                                    width: table.cellWidth
+                                    text: rowHost.modelData[index] || ""
+                                    textFormat: Text.PlainText
+                                    wrapMode: Text.Wrap
+                                    color: root.foreground
+                                    font.pixelSize: Satin.type.meta
+                                }
+                            }
+                        }
+                        HoverHandler { id: rowHover }
+                        AiAskButton {
+                            objectName: "aiTableAsk_" + rowHost.index
+                            z: 2
+                            anchors.right: parent.right
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: rowHost.askPart !== null && (rowHover.hovered || rowHost.cursorHere || hovered)
+                            subject: rowHost.askPart ? rowHost.askPart.label : ""
+                            foreground: root.foreground
+                            surface: root.background
+                            accent: root.accent
+                            onClicked: {
+                                tableBody.cursor = rowHost.index;
+                                table.askAbout(rowHost.index);
+                            }
                         }
                     }
                 }
@@ -880,7 +1141,7 @@ Column {
                 text: parent.block.detail || ""
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
-                color: root.alpha(root.foreground, 0.72)
+                color: root.alpha(root.foreground, 0.76)
                 font.pixelSize: Satin.type.meta
             }
         }
@@ -931,7 +1192,7 @@ Column {
                 text: progress.block.detail || ""
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
-                color: root.alpha(root.foreground, 0.72)
+                color: root.alpha(root.foreground, 0.76)
                 font.pixelSize: Satin.type.meta
             }
         }

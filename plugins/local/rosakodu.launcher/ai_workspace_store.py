@@ -3,7 +3,7 @@
 Phase 1 of AI_WORKSPACE_PLAN.md, section 4.2 (State and persistence model).
 
 Entry point: `python3 ai_workspace_store.py --root <state_root_dir> <command>`
-with command in save/load/list/delete/prune. The payload is one JSON object on
+with command in save/load/list/rename/duplicate/delete/prune. The payload is one JSON object on
 stdin (at most 4 MiB) and the result is one JSON object on stdout.
 
 Worker mode: `python3 ai_workspace_store.py --root <state_root_dir> --serve`
@@ -27,6 +27,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import select
 import sqlite3
 import stat
@@ -47,9 +48,23 @@ MAX_REVISIONS = 256
 PRUNE_DAYS = 30
 PRUNE_KEEP = 20
 BUSY_TIMEOUT_MS = 3000
-COMMANDS = ("save", "load", "list", "delete", "prune")
-USAGE = "usage: python3 ai_workspace_store.py --root <state_root_dir> <save|load|list|delete|prune>\n" \
+SOURCE_COMMANDS = ("source_link", "source_unlink", "source_list")
+COMMANDS = ("save", "load", "list", "rename", "duplicate", "delete", "prune") + SOURCE_COMMANDS
+USAGE = "usage: python3 ai_workspace_store.py --root <state_root_dir> " \
+        "<save|load|list|rename|duplicate|delete|prune|source_link|source_unlink|source_list>\n" \
         "       python3 ai_workspace_store.py --root <state_root_dir> --serve\n"
+BACKUP_NAME = DB_NAME + ".pre-sources"
+SOURCES_DIR = "sources"
+SOURCE_ID = re.compile(r"src-[0-9a-f]{16}")
+WORKSPACE_ID = re.compile(r"ws-[0-9a-f]{16}")
+TURN_KEY = re.compile(r"turn:(0|[1-9][0-9]*)")
+NAME_FORBIDDEN = re.compile(
+    r"[\x00-\x1f\x7f-\x9f\u00ad\u061c\u180e\u200b-\u200f\u2028-\u202e"
+    r"\u2060-\u206f\ufeff\ufff9-\ufffb]")
+STALE_TEMP = re.compile(r"\.tmp-[A-Za-z0-9._-]{1,64}")
+STALE_TEMP_SECONDS = 3600
+MAX_SOURCE_LIST = 200
+MAX_SOURCE_COUNT = 1 << 40
 # Worker idle exit guard (contract: helpers leave within 30 s of their last
 # needed operation). The environment override exists for offline tests only.
 WORKER_IDLE_SECONDS = float(os.environ.get("LAUNCHER_STORE_IDLE", "30") or 30)
@@ -111,6 +126,22 @@ def _optional_text(value, message):
     if not isinstance(value, str):
         raise InputError(message)
     return value
+
+
+def _workspace_title(value):
+    """Names use QML's UTF-16 length, not Python's Unicode codepoint count."""
+    message = "Title must be a non-empty single-line name of at most 96 UTF-16 units"
+    if not isinstance(value, str) or NAME_FORBIDDEN.search(value):
+        raise InputError(message)
+    try:
+        # JSON normally combines pairs; direct callers may supply UTF-16 pairs.
+        value = value.encode("utf-16-le", "surrogatepass").decode("utf-16-le")
+    except UnicodeError:
+        raise InputError(message) from None
+    title = value.strip()
+    if not title or len(title.encode("utf-16-le")) // 2 > 96:
+        raise InputError(message)
+    return title
 
 
 def _open_root(root):
@@ -240,6 +271,16 @@ def _create_tables(conn):
         error TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL)""")
+    # Ownership and size registry for copied CSV sources. The table is added
+    # WITHOUT a schema bump: older code ignores it and its workspace deletes
+    # still cascade these rows. meta.json in the source directory owns content.
+    conn.execute("""CREATE TABLE IF NOT EXISTS sources (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+        bytes INTEGER NOT NULL,
+        rows INTEGER NOT NULL,
+        created_at TEXT NOT NULL)""")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_sources_workspace_id ON sources(workspace_id)")
 
 
 @contextlib.contextmanager
@@ -254,7 +295,48 @@ def _transaction(conn):
     conn.commit()
 
 
-def _ensure_schema(conn):
+def _has_table(conn, name):
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                        (name,)).fetchone() is not None
+
+
+def _backup_before_sources(conn, directory):
+    """Take one private SQLite copy before the first open that adds `sources`.
+
+    Skipped for fresh or empty databases (nothing to protect) and whenever the
+    copy already exists; the copy is never deleted automatically.
+    """
+    if (directory is None or not _has_table(conn, "workspaces")
+            or conn.execute("SELECT 1 FROM meta WHERE key = 'sources_backup'").fetchone()
+            or conn.execute("SELECT 1 FROM workspaces LIMIT 1").fetchone() is None):
+        return
+    try:
+        os.stat(BACKUP_NAME, dir_fd=directory, follow_symlinks=False)
+        return
+    except FileNotFoundError:
+        pass
+    except OSError:
+        raise StoreError("Workspace database backup could not be created") from None
+    temp = f"{BACKUP_NAME}.{uuid.uuid4().hex[:12]}.tmp"
+    try:
+        os.close(os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600,
+                         dir_fd=directory))
+        target = sqlite3.connect(f"/proc/self/fd/{directory}/{temp}")
+        try:
+            conn.backup(target)
+        finally:
+            target.close()
+        # link() never replaces an existing copy; a racing first open loses quietly.
+        with contextlib.suppress(FileExistsError):
+            os.link(temp, BACKUP_NAME, src_dir_fd=directory, dst_dir_fd=directory)
+    except (OSError, sqlite3.Error):
+        raise StoreError("Workspace database backup could not be created") from None
+    finally:
+        with contextlib.suppress(OSError):
+            os.unlink(temp, dir_fd=directory)
+
+
+def _ensure_schema(conn, directory=None):
     """Create or verify the schema, failing closed on other schema versions."""
     with _transaction(conn):
         conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
@@ -268,8 +350,16 @@ def _ensure_schema(conn):
             if version > SCHEMA_VERSION:
                 raise InputError(f"Workspace schema is newer than this app (v{version})")
             raise InputError(f"Workspace schema is not supported by this app (v{version})")
+    # The copy is taken outside the write transaction (a backup from a
+    # connection that holds the write lock never finishes) and before the
+    # table exists, so it is exactly the previous plugin's database.
+    first_sources = row is not None and not _has_table(conn, "sources")
+    if first_sources:
+        _backup_before_sources(conn, directory)
     with _transaction(conn):
         _create_tables(conn)
+        if first_sources:
+            conn.execute("INSERT OR IGNORE INTO meta (key, value) VALUES ('sources_backup', ?)", (_iso(),))
         if row is None:
             # INSERT OR IGNORE: two processes may race on first open; either way
             # the version row ends up correct.
@@ -277,7 +367,7 @@ def _ensure_schema(conn):
                          (str(SCHEMA_VERSION),))
 
 
-def _connect(db_path):
+def _connect(db_path, directory=None):
     try:
         conn = sqlite3.connect(db_path, timeout=BUSY_TIMEOUT_MS / 1000, isolation_level=None,
                                factory=_StoreConnection)
@@ -291,7 +381,7 @@ def _connect(db_path):
             conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
             conn.execute("PRAGMA foreign_keys = ON")
             conn.execute("PRAGMA journal_mode = WAL")
-            _ensure_schema(conn)
+            _ensure_schema(conn, directory)
             return conn
         except sqlite3.OperationalError as exc:
             last_error = exc
@@ -319,7 +409,7 @@ def open_store(root):
             _private_file(directory, DB_NAME + suffix)
         # The held handle prevents a renamed/replaced parent from redirecting
         # SQLite or its sidecars after the no-follow walk.
-        conn = _connect(f"/proc/self/fd/{directory}/{DB_NAME}")
+        conn = _connect(f"/proc/self/fd/{directory}/{DB_NAME}", directory)
         conn.root_fd = directory
         return conn
     except BaseException:
@@ -555,16 +645,261 @@ def cmd_list(conn, payload):
         FROM workspaces w ORDER BY w.pinned DESC, w.updated_at DESC LIMIT ?""", (limit,)).fetchall()
     return {"ok": True, "workspaces": [{"id": row[0], "title": row[1], "summary": row[2],
                                         "updatedAt": row[3], "pinned": bool(row[4]),
-                                        "artifactCount": row[5]} for row in rows]}
+                                         "artifactCount": row[5]} for row in rows]}
+
+
+def cmd_rename(conn, payload):
+    """Rename metadata only; workspaceName keeps subsequent UI saves named."""
+    if not isinstance(payload, dict):
+        raise InputError("Rename payload must be a JSON object")
+    workspace_id = _require_text(payload.get("workspaceId"), "workspaceId must be a non-empty string")
+    title = _workspace_title(payload.get("title"))
+    with _transaction(conn):
+        now = _iso()
+        if conn.execute("UPDATE workspaces SET title = ?, updated_at = ? WHERE id = ?",
+                        (title, now, workspace_id)).rowcount != 1:
+            raise InputError("Workspace does not exist")
+        _upsert_interaction(conn, workspace_id, [("workspaceName", _canonical(title))], now)
+    return {"ok": True, "workspaceId": workspace_id, "title": title}
+
+
+def _duplicate_json(text):
+    """Unlike load's tolerant display path, copying must never drop bad data."""
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON key")
+            result[key] = value
+        return result
+
+    try:
+        value = json.loads(text, parse_constant=_reject_constant, object_pairs_hook=unique_object)
+        _canonical(value).encode("utf-8")
+        return value
+    except (TypeError, ValueError, RecursionError, InputError):
+        raise StoreError("Stored workspace data cannot be duplicated") from None
+
+
+def _remap_artifact_refs(value, mapping):
+    """Remap identity fields and legacy checklist keys, never turn-state keys."""
+    if isinstance(value, list):
+        return [_remap_artifact_refs(entry, mapping) for entry in value]
+    if not isinstance(value, dict):
+        return value
+    result = {}
+    for key, entry in value.items():
+        new_key = key
+        if key.startswith("checklist:"):
+            new_key = "checklist:" + mapping.get(key[10:], key[10:])
+        if key in ("artifactId", "activeArtifactId") and isinstance(entry, str):
+            entry = mapping.get(entry, entry)
+        if new_key in result:
+            raise StoreError("Stored workspace data cannot be duplicated")
+        result[new_key] = _remap_artifact_refs(entry, mapping)
+    return result
+
+
+def cmd_duplicate(conn, payload):
+    """Insert an independent snapshot, without provider sessions or CSV ownership.
+
+    Retains every stored artifact/interaction (no retention pass). Turn-backed
+    IDs match AiService.artifactIdFor; other artifacts receive fresh IDs. Each
+    artifact starts with one parentless checkpoint, not the source history.
+    """
+    if not isinstance(payload, dict):
+        raise InputError("Duplicate payload must be a JSON object")
+    workspace_id = _require_text(payload.get("workspaceId"), "workspaceId must be a non-empty string")
+    destination = payload.get("newWorkspaceId")
+    if not isinstance(destination, str) or not WORKSPACE_ID.fullmatch(destination):
+        raise InputError("newWorkspaceId must look like ws-<16 lowercase hex>")
+    title = _workspace_title(payload.get("title"))
+    with _transaction(conn):
+        source = conn.execute("""SELECT schema_version, summary, agent, draft, attachment,
+            active_artifact_id FROM workspaces WHERE id = ?""", (workspace_id,)).fetchone()
+        if source is None:
+            raise InputError("Workspace does not exist")
+        if conn.execute("SELECT 1 FROM workspaces WHERE id = ?", (destination,)).fetchone():
+            raise InputError("Destination workspace already exists")
+        interaction = {key: _duplicate_json(text) for key, text in conn.execute(
+            "SELECT key, value FROM interaction_state WHERE workspace_id = ? ORDER BY key",
+            (workspace_id,))}
+        mapping = {}
+        for key, turn in interaction.items():
+            if not key.startswith("turn:"):
+                continue
+            match = TURN_KEY.fullmatch(key)
+            if (match is None or not isinstance(turn, dict)
+                    or isinstance(turn.get("id"), bool) or not isinstance(turn.get("id"), int)
+                    or str(turn["id"]) != match[1]):
+                raise StoreError("Stored workspace turns cannot be duplicated")
+            if "blocks" in turn:
+                try:
+                    _validate_artifact({"id": "inline", "blocks": turn["blocks"]})
+                except InputError:
+                    raise StoreError("Stored workspace turns cannot be duplicated") from None
+            old_id = turn.get("artifactId")
+            if old_id is None or old_id == "":
+                continue  # Legacy inline-only turns have no artifact reference.
+            if not isinstance(old_id, str) or old_id in mapping:
+                raise StoreError("Stored workspace turns cannot be duplicated")
+            mapping[old_id] = "af-" + destination[3:] + "-t" + match[1]
+        artifacts = conn.execute("""SELECT id, kind, presentation_version, blocks
+            FROM artifacts WHERE workspace_id = ? ORDER BY rowid""", (workspace_id,)).fetchall()
+        for old_id, _, _, _ in artifacts:
+            if old_id not in mapping:
+                mapping[old_id] = "af-" + destination[3:] + "-a" + uuid.uuid4().hex
+        if source[5] not in (None, "") and source[5] not in mapping:
+            raise StoreError("Stored workspace data cannot be duplicated")
+        if len(set(mapping.values())) != len(mapping):
+            raise StoreError("Stored workspace data cannot be duplicated")
+        for new_id in mapping.values():
+            if conn.execute("SELECT 1 FROM artifacts WHERE id = ?", (new_id,)).fetchone():
+                raise InputError("Destination artifact already exists")
+        now = _iso()
+        conn.execute("""INSERT INTO workspaces (id, schema_version, title, summary, agent,
+            session_ref, draft, attachment, active_artifact_id, created_at, updated_at, pinned)
+            VALUES (?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, 0)""",
+            (destination, source[0], title, source[1], source[2], source[3], source[4],
+             mapping.get(source[5], source[5]), now, now))
+        for old_id, kind, version, text in artifacts:
+            copied_blocks = _remap_artifact_refs(_duplicate_json(text), mapping)
+            try:
+                validated = _validate_artifact({"id": mapping[old_id], "kind": kind,
+                    "presentationVersion": version, "blocks": copied_blocks})
+            except InputError:
+                raise StoreError("Stored workspace data cannot be duplicated") from None
+            new_id, kind, version, checkpoint, _, _ = validated
+            revision_id = "rv-" + uuid.uuid4().hex
+            conn.execute("""INSERT INTO artifacts (id, workspace_id, kind,
+                presentation_version, blocks, base_revision, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (new_id, destination, kind, version, checkpoint, revision_id, now))
+            conn.execute("""INSERT INTO revisions (id, artifact_id, parent_revision,
+                checkpoint, reason, prompt, created_at) VALUES (?, ?, NULL, ?, '', '', ?)""",
+                (revision_id, new_id, checkpoint, now))
+        interaction.pop("handoffHome", None)
+        interaction.pop("csvSource", None)
+        interaction["workspaceName"] = title
+        copied = _remap_artifact_refs(interaction, mapping)
+        conn.executemany("""INSERT INTO interaction_state (workspace_id, key, value, updated_at)
+            VALUES (?, ?, ?, ?)""",
+            [(destination, key, _canonical(value), now) for key, value in copied.items()])
+    return {"ok": True, "workspaceId": destination, "title": title}
 
 
 def _delete_workspaces(conn, workspace_ids):
-    """Remove workspaces and their interaction rows; FKs cascade the rest."""
+    """Remove workspaces and their interaction rows; FKs cascade the rest.
+
+    Returns (deleted count, source ids whose rows the cascade removes), read
+    BEFORE the delete so the caller can remove the copies after the commit.
+    """
     deleted = 0
+    source_ids = []
     for workspace_id in workspace_ids:
+        source_ids += [row[0] for row in conn.execute(
+            "SELECT id FROM sources WHERE workspace_id = ? ORDER BY rowid", (workspace_id,))]
         conn.execute("DELETE FROM interaction_state WHERE workspace_id = ?", (workspace_id,))
         deleted += conn.execute("DELETE FROM workspaces WHERE id = ?", (workspace_id,)).rowcount
-    return deleted
+    return deleted, source_ids
+
+
+def _open_sources(root_fd):
+    """The sources directory handle, or None when absent, linked or foreign."""
+    if root_fd is None:
+        return None
+    try:
+        fd = os.open(SOURCES_DIR, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=root_fd)
+    except OSError:
+        return None
+    if os.fstat(fd).st_uid != os.getuid():
+        os.close(fd)
+        return None
+    return fd
+
+
+def _remove_tree(parent_fd, name, depth=0):
+    """Remove one directory below `parent_fd`: regular files and real dirs only.
+
+    Nothing is followed; a link, special file or over-deep tree stops the walk
+    (the directory then stays, which is harmless).
+    """
+    fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    try:
+        for entry in os.listdir(fd):
+            mode = os.stat(entry, dir_fd=fd, follow_symlinks=False).st_mode
+            if stat.S_ISDIR(mode) and depth < 4:
+                _remove_tree(fd, entry, depth + 1)
+            elif stat.S_ISREG(mode):
+                os.unlink(entry, dir_fd=fd)
+            else:
+                raise OSError("unexpected entry in a source directory")
+    finally:
+        os.close(fd)
+    os.rmdir(name, dir_fd=parent_fd)
+
+
+def _newest_mtime(parent_fd, name):
+    info = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
+    newest = info.st_mtime
+    fd = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent_fd)
+    try:
+        for entry in os.listdir(fd):
+            newest = max(newest, os.stat(entry, dir_fd=fd, follow_symlinks=False).st_mtime)
+    finally:
+        os.close(fd)
+    return newest
+
+
+def _cleanup_sources(root_fd, source_ids):
+    """Best-effort file cleanup AFTER the database commit; never raises.
+
+    Removes only the named src-* directories, plus stale `.tmp-*` directories
+    (older than an hour). A complete src-* directory without a row is never
+    touched here: a restored older database must not make real copies look
+    orphaned. Returns (src directories removed, stale temp directories removed).
+    """
+    removed = stale = 0
+    try:
+        sources = _open_sources(root_fd)
+        if sources is None:
+            return 0, 0
+        try:
+            for source_id in source_ids:
+                if not SOURCE_ID.fullmatch(source_id):
+                    continue
+                try:
+                    _remove_tree(sources, source_id)
+                    removed += 1
+                except OSError:
+                    continue
+            cutoff = time.time() - STALE_TEMP_SECONDS
+            for name in os.listdir(sources):
+                if not STALE_TEMP.fullmatch(name):
+                    continue
+                try:
+                    if (stat.S_ISDIR(os.stat(name, dir_fd=sources, follow_symlinks=False).st_mode)
+                            and _newest_mtime(sources, name) < cutoff):
+                        _remove_tree(sources, name)
+                        stale += 1
+                except OSError:
+                    continue
+        finally:
+            os.close(sources)
+    except OSError:
+        pass
+    return removed, stale
+
+
+def _cleanup_extras(root_fd, source_ids):
+    """Result fields for a cleanup; absent when nothing was owed or done."""
+    removed, stale = _cleanup_sources(root_fd, source_ids)
+    extras = {}
+    if source_ids:
+        extras["sourcesRemoved"] = removed
+    if stale:
+        extras["staleTempRemoved"] = stale
+    return extras
 
 
 def cmd_delete(conn, payload):
@@ -572,8 +907,10 @@ def cmd_delete(conn, payload):
         raise InputError("Delete payload must be a JSON object")
     workspace_id = _require_text(payload.get("workspaceId"), "workspaceId must be a non-empty string")
     with _transaction(conn):
-        deleted = _delete_workspaces(conn, [workspace_id])
-    return {"ok": True, "deleted": deleted > 0}
+        deleted, source_ids = _delete_workspaces(conn, [workspace_id])
+    result = {"ok": True, "deleted": deleted > 0}
+    result.update(_cleanup_extras(conn.root_fd, source_ids))
+    return result
 
 
 def cmd_prune(conn, payload):
@@ -582,6 +919,7 @@ def cmd_prune(conn, payload):
     preserve = payload.get("preserveWorkspaces", False)
     if not isinstance(preserve, bool):
         raise InputError("preserveWorkspaces must be a boolean")
+    source_ids = []
     with _transaction(conn):
         # Automatic launcher maintenance preserves saved conversations. The
         # legacy retention policy remains available only to explicit prune calls.
@@ -592,15 +930,89 @@ def cmd_prune(conn, payload):
                 ORDER BY updated_at DESC, rowid DESC""").fetchall()
             keep = {row[0] for row in unpinned[:PRUNE_KEEP]}
             ids = [row[0] for row in unpinned if row[0] not in keep or row[1] < cutoff]
-            pruned_workspaces = _delete_workspaces(conn, ids)
+            pruned_workspaces, source_ids = _delete_workspaces(conn, ids)
         cursor = conn.execute("DELETE FROM artifacts WHERE workspace_id NOT IN (SELECT id FROM workspaces)")
         pruned_artifacts = max(cursor.rowcount, 0)
-    return {"ok": True, "prunedWorkspaces": pruned_workspaces, "prunedArtifacts": pruned_artifacts}
+    result = {"ok": True, "prunedWorkspaces": pruned_workspaces, "prunedArtifacts": pruned_artifacts}
+    result.update(_cleanup_extras(conn.root_fd, source_ids))
+    return result
+
+
+def _source_id(payload):
+    source_id = payload.get("sourceId")
+    if not isinstance(source_id, str) or not SOURCE_ID.fullmatch(source_id):
+        raise InputError("sourceId must look like src-<16 lowercase hex>")
+    return source_id
+
+
+def _source_count(payload, name):
+    value = payload.get(name)
+    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= MAX_SOURCE_COUNT:
+        raise InputError(f"{name} must be a non-negative integer")
+    return value
+
+
+def cmd_source_link(conn, payload):
+    """Record that a workspace owns a copied source; idempotent for the same owner."""
+    if not isinstance(payload, dict):
+        raise InputError("Source link payload must be a JSON object")
+    workspace_id = _require_text(payload.get("workspaceId"), "workspaceId must be a non-empty string")
+    source_id = _source_id(payload)
+    size, rows = _source_count(payload, "bytes"), _source_count(payload, "rows")
+    with _transaction(conn):
+        if conn.execute("SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)).fetchone() is None:
+            raise InputError("Workspace does not exist")
+        owner = conn.execute("SELECT workspace_id FROM sources WHERE id = ?", (source_id,)).fetchone()
+        if owner is not None and owner[0] != workspace_id:
+            raise InputError("Source already belongs to another workspace")
+        conn.execute("""INSERT INTO sources (id, workspace_id, bytes, rows, created_at)
+            VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET bytes = excluded.bytes,
+            rows = excluded.rows""", (source_id, workspace_id, size, rows, _iso()))
+    return {"ok": True, "sourceId": source_id}
+
+
+def cmd_source_unlink(conn, payload):
+    """Drop the registry row; with `removeDir: true` also remove the copy.
+
+    The directory goes only AFTER the commit, through the same no-follow,
+    best-effort helper the delete cascades use (it never raises; a directory
+    that cannot be removed simply stays). `sourcesRemoved` reports 0 or 1.
+    """
+    if not isinstance(payload, dict):
+        raise InputError("Source unlink payload must be a JSON object")
+    source_id = _source_id(payload)
+    remove_dir = payload.get("removeDir", False)
+    if not isinstance(remove_dir, bool):
+        raise InputError("removeDir must be a boolean")
+    with _transaction(conn):
+        removed = conn.execute("DELETE FROM sources WHERE id = ?", (source_id,)).rowcount
+    result = {"ok": True, "unlinked": removed > 0}
+    if remove_dir:
+        result.update(_cleanup_extras(conn.root_fd, [source_id]))
+    return result
+
+
+def cmd_source_list(conn, payload):
+    """Registered sources (at most 200, oldest first) plus whole-registry totals."""
+    if not isinstance(payload, dict):
+        raise InputError("Source list payload must be a JSON object")
+    workspace_id = payload.get("workspaceId")
+    if workspace_id is not None:
+        _require_text(workspace_id, "workspaceId must be a non-empty string")
+    rows = conn.execute("""SELECT id, workspace_id, bytes, rows, created_at FROM sources
+        WHERE (?1 IS NULL OR workspace_id = ?1) ORDER BY created_at, rowid LIMIT ?2""",
+        (workspace_id, MAX_SOURCE_LIST + 1)).fetchall()
+    count, total = conn.execute("SELECT COUNT(*), COALESCE(SUM(bytes), 0) FROM sources").fetchone()
+    return {"ok": True, "totalBytes": total, "count": count, "truncated": len(rows) > MAX_SOURCE_LIST,
+            "sources": [{"id": row[0], "workspaceId": row[1], "bytes": row[2], "rows": row[3],
+                         "createdAt": row[4]} for row in rows[:MAX_SOURCE_LIST]]}
 
 
 def dispatch(conn, command, payload):
     handler = {"save": cmd_save, "load": cmd_load, "list": cmd_list,
-               "delete": cmd_delete, "prune": cmd_prune}.get(command)
+               "rename": cmd_rename, "duplicate": cmd_duplicate,
+               "delete": cmd_delete, "prune": cmd_prune, "source_link": cmd_source_link,
+               "source_unlink": cmd_source_unlink, "source_list": cmd_source_list}.get(command)
     if handler is None:
         raise InputError("Unknown command")
     return handler(conn, payload)

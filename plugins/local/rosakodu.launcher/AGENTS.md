@@ -1,5 +1,171 @@
 # rosakodu.launcher agent notes
 
+Repository checkpoint (2026-10-25): active development is now in the private
+owner repository on `feat/launcher-openui-native`. Preserve the installed
+October native task/calculator/CSV/workspace work before replacing presentation.
+The checkpoint adds a scratch-only runner: `python3 -B tests/run_offline.py`.
+It clears provider/runtime environment overrides, isolates every HOME/XDG root,
+and uses short runtime paths plus the preview checks' required HOME prefix.
+Do not force a Qt Controls style: keyboard behaviour must be explicit in our
+controls (Return/Enter as well as Space), independent of the system style.
+
+Review fixes: composed calculation-unit exponents are bounded to 1024 (RANGE)
+in BOTH engines, with timeout-backed JS and real-QML renderer regressions.
+The shared golden table now has 328 cases; fuzz remains fresh. Form follow-ups
+carry optional numeric `unit` (<=24 UTF-16 units); it is not accepted for other
+kinds. The 20-turn window now prunes corresponding UI/checklist state during
+the session, not only after restore. Failed action choices can be picked again;
+roving cursors reveal their actual row; Ask controls reserve a trailing gutter;
+calculation duplication follows the host's availability gate. Review covered
+security, consistency and UX; the broad quality reviewer hit its usage limit.
+No live deployment or Wayland/mixed-DPR qualification is implied by this work.
+
+Owner clarification (2026-10-24): intelligent UI belongs INSIDE the native
+launcher's existing AI experience, with its composer, turns and saved state.
+The standalone OpenUI page is a development harness only, not a product
+destination or a manual step the owner should need. Native embedding and its
+resource/lifecycle costs are integration work; do not substitute an external
+app or present the preview command as completion.
+
+The renderer-only `launcher/embedded.*` entry now has no second composer/store
+and one mocked-host round-trip check (nine browser checks total). Do NOT import
+Qt WebEngine into the live launcher yet: a scratch Quickshell instantiation
+crashed with `Argument list is empty ... QCoreApplication`; current host startup
+hard-codes Qt `argc = 0` and also lacks early WebEngine setup. No supported flag
+workaround was found. Do not modify/replace the shell binary or startup without
+separate approval. This is not a delivered native host; evaluate a QML adapter
+over framework-independent OpenUI core as well.
+
+OpenUI prototype checkpoint (2026-10-24): owner approved autonomous investigation
+and implementation after comparing Thesys and CopilotKit. Chosen foundation is
+**thesysdev/openui core**, using the Thesys `open-intelligent-ui` demo's reusable
+component/function source, not its Next.js application/backend. The owner's
+third link to `thesysdev/openui` is that underlying framework, not another demo.
+Prototype source/build is `~/Work/launcher-openui/launcher/`; its README
+documents open/build/tests. Nothing in the installed native renderer was replaced.
+
+Actual Renderer + shared reactive state + matching generated prompt are wired
+to a loopback stdlib Python backend and the audited Codex helpers. Saves reuse
+the existing SQLite implementation in a SEPARATE `<launcher-state>/rich/`
+database; no native workspace access, pruning or retention. Credentials stay in
+an isolated provider home; no model execution/search tools, arbitrary HTML,
+external media, telemetry, Query/Mutation or broad host bridge. Generic OpenUI
+math is not a substitute for our validated calculation engine.
+
+Verification: 336 Vitest / 30 Python backend / 8 real-SQLite browser checks,
+types/build; three synthetic real Codex generations (meal/garden/gears) valid
+in ~15/28/30s. Exact-output UI replay verified local controls at 420/1280px with
+no page errors/external browser requests. Saved-state reload, delayed/failed
+saves, invalid model output and generation cancellation have regressions.
+Scratch state only; native workspaces untouched. Real-provider results are one
+small sample, not a reliability benchmark; complete-answer Codex latency remains.
+
+BLOCKER before native replacement: headless Chromium + backend used ~435–437 MiB
+aggregate PSS (10 processes), above the 256 MiB optional-runtime gate. GPU-off
+variants did not fix it. Cleanup left zero owned processes; startup/CPU figures
+are short headless observations, not live Wayland qualification. Keep the preview
+explicit (`npm --prefix ~/Work/launcher-openui run launcher:open`); no
+desktop shortcut or shell preload was installed. Next evaluate a lighter isolated
+host, not more fixed widget types. Qt WebEngine Quick development libs exist;
+CMake is absent. Independent review agents hit quota; no review pass claimed.
+No release, version bump, commit, push, canonical sync or deletion of native work.
+
+Current owner priority (2026-10-22, implemented 2026-10-23): **custom UI quality
+and usefulness**, not another maintenance/status pass. Task-first composition is
+now implemented in `AiLayout.answerComposition`, `AiAnswer.qml` and
+`AiTaskSurface.qml`: task title, compact orientation with an explicit full-prose
+disclosure, primary native object, supporting content and sources last. Wide
+forms can have a context rail; diagram controls sit alongside their canvas when
+space permits. Plain/image briefs retain their existing layout. These are
+bounded native layouts for existing blocks, not arbitrary generated UIs/code.
+
+Composition carries its original blocks and their indices in ONE descriptor.
+Never split these into independently updating QML properties: replacing a
+diagram with a form/comparison exposed stale indices and TypeErrors. The warning-
+failing transition regression pins this. `AiBlocks.contextBlocks` preserves the
+whole-answer slider/diagram binding context across visual groups. Resize and text
+view keep the actual tool instance; original state/choice/focus indices, gates,
+exports and stored blocks remain unchanged. No response/store schema change.
+
+Comparisons now lead with the authored AI recommendation and evidence, then
+explicit **Continue with…** (an AI follow-up). Matrix width depends on visible
+option count. Narrower layouts show every candidate in a shortlist and ONE
+inspected detail card; inspecting is local, never a send or persisted edit.
+Pin/hide and raw option identities remain intact. Timelines now lead with
+progress/first unfinished item and jump to its real row; reset reveals the first
+row. No item reordering, inferred schedules or invented remaining time.
+Prompt guidance now asks for the native task object as the answer, not a second
+prose answer with widgets attached; all existing byte/security limits remain.
+
+Visual fixtures are reproducible with `tests/AiTaskVisualCheck.qml`: decisions,
+plans/progress and forms at 420/760/980px, plus light/Crimson Gold palette
+variants. Screenshots `/tmp/opencode/ai-task-*.png` were read and inspected.
+They are illustrative/offscreen, NOT real provider output or live Wayland/DPR
+qualification. Keep custom UI experience/evaluation as the next priority; the
+older persistence-notice/scenario-export backlog below is secondary. No release,
+version bump, commit, push or canonical sync has been performed.
+
+Final verification for this UI slice (2026-10-23): **630 Python tests (2 skipped),
+1,765 main QtTests, 28 blocks / 23 visual / 12 answer / 6 task-visual**, plus
+all eight isolated service/store/preview/source/detached checks. Scratch
+HOME/state/runtime/cache/config only; no real provider calls or user workspace
+mutations. Final main log has no TypeError/ReferenceError/binding-loop warnings;
+known standalone Qt lint and Python ResourceWarnings remain. Task replacement
+and image/text teardown each have warning-failing regressions. Logs are under
+`/tmp/opencode/launcher-task-finish-i4v22dwg/`. These results do not establish
+live provider-selection quality, Wayland lifecycle or mixed-DPR correctness.
+
+Initial owner-supplied OpenUI candidate review (2026-10-23; superseded by the
+prototype checkpoint above): source/license review of
+`thesysdev/open-intelligent-ui` and `thesysdev/openui` found MIT-licensed reusable
+layout/state/action/parser/renderer infrastructure, substantially broader than
+the current fixed block vocabulary. React/web components are not a QML drop-in.
+Evaluate a lazy rich-workspace renderer side by side before extending the block
+catalogue further; preserve native launcher, provider credentials, durable store
+and typed calc validation. No upstream dependency was installed or code adopted,
+and no renderer migration is approved/completed by this source review alone.
+
+Earlier audit status (2026-10-22; installed tree, manifest still **1.22.0**): the
+437-Python / 1,113-QtTest October 8 checkpoint was not the latest work. October
+9–10 additions include editable calc data, scenarios, local undo/redo, exports,
+local calc duplication, forms, actions/compare/timeline, “Ask about this”, Codex
+prompt de-duplication/timing and soft block failures. The scoped October 10 live
+calc pass below remains valid historical evidence, not a new live qualification.
+Canonical `~/Work/myarchy` is clean at launcher commit `0a4ba8e`
+(October 6); the initial audit found 94 installed files different/new, before
+the new test-helper files. Nothing was synced, released, committed or pushed
+during this resume; no product feature was built. Earlier dated paragraphs
+below retain their checkpoint scope.
+
+Fresh offline verification: **624 Python tests (2 skipped), 1,710 main QtTests,
+28 blocks / 23 visual / 12 answer**, plus all eight checks:
+`AiServiceCheck`, `AiWorkspaceStoreCheck`, `AiWorkspaceContextCheck`,
+`AiSeamsServiceCheck`, `AiCsvSourceCheck`, `AiAttachmentPreviewCheck`,
+`AiPreviewServiceCheck`, `AiDetachedWindowCheck`. Fresh scratch HOME/state/runtime/
+cache/config, offscreen/software rendering and unset `LAUNCHER_*` flags kept real
+providers, credentials and user state out of the run. Existing `ResourceWarning`s
+remain. The main total includes eight new strict-equality helper checks.
+Test-only repairs use `verify(TestJson.equal(...))` for strict recursive leaf
+type/value equality (including exact numbers and array order), ignoring only
+object key order because QVariant reorders keys. `tests/TestJson.js` has its own
+`tests/tst_TestJson.qml` regressions, including rejection of a 1e-6 numeric
+difference; QtTest's numeric-tolerant object comparison is not a substitute.
+Other fixture fixes restore the fake prepared Codex after
+`new` intentionally clears it, sanitise its environment and guard real auth
+preparation. Recorded logs: `/tmp/opencode/launcher-status-20261022-6ts2myhe/`
+(`python-final.log`, `qml-final.log`, `blocks-final.log`, `visual.log`, `answer.log`
+and `<Checkname>.log`); initial logs are not the final verdict.
+
+Secondary backlog: make the 200 KiB `stateNotice` persistence-refusal guard visible;
+then reveal/focus scenario comparison on opening, add pane PageDown, and align
+scenario exports (CSV omits table-formula rows; Markdown also omits differing
+inputs). These gaps still exist by read-only inspection. Dynamic-control/focus
+live clicks and the October 10 compare-body/stale-QML issue remain unverified.
+No Phase 3 exit, targeted artifact patching, full conversation branching or
+programmable runtime is claimed. Current prompt guards are 13,000 / 15,000 /
+26,000 bytes (Codex / Hermes / full), schema 13,500; the conversation budget is
+192 KiB, not the historical 64 KiB (still the plain-text attachment cap).
+
 Automatic maintenance MUST send `{preserveWorkspaces: true}`. The old explicit
 store-prune policy deletes unpinned workspaces above 20 or older than 30 days;
 do not invoke it silently while restoring. Enabling the previously skipped
@@ -7,6 +173,260 @@ cleanup path in 1.21.2 removed 47 live workspaces. They were recovered additivel
 from a pre-update SQLite backup (no existing records overwritten), and 1.21.3
 preserves all 67 on subsequent AI entry. This is why load housekeeping and
 user-requested destructive retention must stay separate.
+
+Reusable-tools slice (2026-10-08, unreleased; no manifest/version bump, release
+or canonical-repository sync): **More → Rename… / Duplicate…** use themed native
+keyboard dialogs. `AiState.workspaceName` and the store validator accept trimmed,
+non-empty, plain single-line names of at most 96 UTF-16 units; reject controls,
+unsafe format characters and unpaired surrogates. `interaction.workspaceName` is the
+saved override: `workspaceDisplayTitle` uses it for the workspace row/search and
+detached window without changing answer headings. Preserve it through thin
+draft saves, full authoritative snapshots and restoration.
+
+`AiService.beginWorkspaceAction` uses a save-acknowledgement barrier before
+the backend rename/duplicate; never clone stale disk state after an unconfirmed
+save. After cloning, the `switch-save` barrier commits edits made to the ORIGINAL
+during the action and waits for an acknowledgement of the unchanged live snapshot
+before loading the copy (one save at a time, repeated if editing continues).
+The final `switch-load` phase freezes the outgoing pane/composer and local-state
+setters, keeps the original's session/handoff/source ownership for rollback, and
+clears its typing intent only when the copy applies. Failed/null/interrupted loads
+leave the original open with visible guidance. A lost rename acknowledgement
+replays the requested title in the recovery save rather than undoing a committed
+rename. The single-shot action guard also covers a worker that never starts.
+Worker-loss recovery releases the startup latch and recomputes pending work
+from the surviving queue; queued requests must never be reported as idle.
+Hold autosave/close-commit mutations while the action is pending. Busy/stopping,
+loading/unsettled restore, keep-data and pending-action gates prevent conflicting
+actions, submits and switches. Failures leave local content intact with an
+unconfirmed-action message; late replies must not navigate a newer workspace.
+No retention/prune pass belongs to duplication.
+Naming forms capture the opening workspace identity and close when it changes;
+named empty copies keep management reachable without taking CSV ownership.
+
+`cmd_duplicate` transactionally creates independent workspace/artifact identities,
+remaps artifact references and gives each copied artifact one fresh parentless
+revision checkpoint, NOT the source revision history. Keep turns, checklists,
+UI state (including `calc:<blockIndex>` adjusted inputs), draft and attachment.
+The original saved workspace, provider session and handoff home remain intact;
+the copy has blank `sessionRef` and no `handoffHome`. Remove the copy's `csvSource`
+link and do not clone/share the source registry or kept CSV resource; it remains
+owned by the original. Cached image references are copied unchanged, not new
+durable asset copies. This is NOT full AI conversation branching: the first
+future provider prompt does not reconstruct copied history — the bounded
+follow-up snapshot described next is the only prior state it can carry — and
+state-aware AI revisions (targeted artifact patches) are not delivered by this
+slice.
+
+Offline verification for this slice: 418 Python tests (two skipped;
+existing `ResourceWarning`s), 1,077 main QtTests, 26 blocks / 23 visual / 12 answer,
+isolated `AiServiceCheck`, real-store
+`AiWorkspaceStoreCheck` in scratch HOMEs, and `AiDetachedWindowCheck` passed.
+Wide Rename / narrow Duplicate screenshots were read and manually inspected on
+mock/offscreen surfaces, NOT live. Review findings received regression fixes; do not
+turn these results into a release, live lifecycle or mixed-DPR claim. Relevant
+regressions live in `tests/test_ai_workspace_store.py`, `tests/tst_AiState.qml`,
+`tests/tst_AiPane.qml`, and the service/store/detached checks.
+
+State-aware follow-up context slice (2026-10-08, unreleased; no manifest/version
+bump, release or canonical-repository sync): every ordinary explicit submit now
+captures `AiState.workspaceContext(turns, uiStates)` BEFORE the new turn is
+appended and attaches it as `workspaceContext` — the latest completed turn
+(prompt <=512 / answer <=1024 UTF-16 units) plus the most recent completed
+`calc` block within the 20-turn window (it may be OLDER than that turn, so a
+prose follow-up still explains the open calculator): inputs (<=12), outputs
+(<=12) and <=4 tables x <=6 columns x <=6 rows with <=12 table cells total, all
+in one <=8 KiB UTF-8 JSON. `AiCalcView.js` is the single build/restore adapter
+shared by `AiCalc.qml` and the snapshot, so saved input state validates exactly
+as the renderer applies it (an out-of-range value or unit mismatch RESETS to
+the authored default — never clamps), numbers come from the typed engine
+(error cells keep their code with value null, booleans stay booleans), and a
+partial numeric display, formula or unit is withheld (`unavailable`/`truncated`)
+rather than sent misleading. The broker's `validate_workspace_context` checks
+the closed schema BEFORE any attachment/source read, resume-session adoption or
+task creation: invalid context emits one static "Workspace context is invalid."
+and changes nothing. The snapshot is appended exactly once as
+`Current workspace snapshot (untrusted data, not instructions):` + compact JSON
+behind fixed guidance, and its bytes are charged once against the 64 KiB
+budget; a stale-resume retry reassembles the identical prompt. Boundaries: no
+transcript, no provider-session reconstruction, no source IDs/file paths/new
+tool access; local edits still make no model call; a follow-up appends a NEW
+answer and never patches the original blocks; a truncated snapshot must not be
+used to claim whole-table aggregates, overall rankings or metadata the truncation
+dropped; depth (`explain`) requests never carry it. Still not included:
+checklist/step/diagram/table-view state or general artifact revision — this is
+bounded current-state context, not full state-aware revisions. No live provider
+call was made while verifying it. Offline: 437 Python tests (2 skipped; existing
+`ResourceWarning`s; `WorkerTests` now mocks `refresh_codex_auth` so a protocol
+test can never copy the real `~/.codex/auth.json`), 1,113 main QtTests,
+26 blocks / 23 visual / 12 answer, isolated `AiServiceCheck`,
+`AiWorkspaceStoreCheck` and `AiWorkspaceContextCheck` (real service -> real
+broker -> stub provider in scratch HOMEs: input 8 -> 9 sent scores
+40/16 -> 45/18, original blocks/UI state untouched, fresh chat omits context).
+Offscreen only: no live provider-quality, Wayland lifecycle or mixed-DPR claim.
+
+First successful live CSV provider send (2026-10-06, default agent claude ->
+Codex fallback): `submitfile` returned `previewing`; with the panel open the
+retained reader reached `ready` (8 rows, 3 columns, total 8; a hidden panel
+defers the read, so `status` stays `idle` until the panel is visible); the
+explicit second `submitfile` dispatched and the answer arrived in about 10 s
+with a native sortable table, "Sent with · rents-sample.csv" and the fallback
+note. The stated mean (925) and range (600 Porto to 1,800 Dublin) match the
+fixture. This closes the "successful live provider send" gap from the 1.22.0
+qualification for Codex on the 3440x1440 scale-1.25 display only; mixed-DPR and
+a second scale remain unrecorded. It added two test workspaces ("hi" and the
+CSV one) to the user's real store on top of the earlier ws-62943ec34e1535ba.
+
+Agent fallback (2026-10-06): the live default agent is `claude`, which
+`AiState.supported` rejects, so every submit failed ("supports Codex and Hermes
+for now"). `AiState.resolveAgent(agent, defaultAgent)` now keeps a supported
+agent, else a supported default, else falls back to Codex when the default is a
+non-empty unsupported one (an EMPTY default still returns "" and asks the person
+to choose). The shared `~/.config/omarchy/defaults/agent` is never edited. The
+fallback is disclosed on the latest turn (`aiAgentFallbackNote`, derived from
+`service.agent`/`defaultAgent`, not persisted): "Answered by Codex: the
+launcher doesn't support claude yet." Live: `submit 'hi'` with the real default
+`claude` answered in about 5 s as codex. `AiServiceCheck` was updated to pin the
+empty-default case instead of an explicit unsupported one.
+
+Text-contrast pass (2026-10-06): informational text no longer sits below
+0.76 opacity. Measured on the live Crimson Gold surface (theme foreground about
+219,180,44 over a surface of about 54..85,0..13,0..3): contrast is roughly 3.0 at
+0.50, 3.4-3.7 at 0.58, 4.6-5.2 at 0.72, 5.4-6.1 at 0.80. The composer
+placeholder (0.58) really failed AA at 3.39:1 and is now 4.77:1 (pinned by
+`test_placeholderMeetsReadableContrast`); the 21 raised labels were 0.34-0.65
+(RECENTS, ALL APPLICATIONS, result count, keyboard hints, mode label, step
+and row counts, chart axes, slider notes, filter placeholder, thinking/loading
+text). Honest correction: idle `AiButton` text at the old 0.72 already passed
+(about 4.9-5.2:1), so the 0.80 button change is polish, not a fix. Measurement
+traps: the text caret is drawn at full colour and gave a false 7.7:1; small
+glyphs anti-alias low in a screenshot, so for small text trust the computed
+value (alpha-blend over the sampled surface) over the pixel reading.
+
+Hidden-entries fix (2026-10-06, live-verified only): omarchy's
+`/usr/share/omarchy/shell/services/hidden-entries.sh` prints the correct list
+but EXITS 1 on success (its last line tests a missing ~/.nix-profile dir). The
+panel only used the output when `exitCode === 0`, so the hidden set was always
+empty and XFCE-only entries (About Xfce, Appearance, Window Manager...) showed
+on Hyprland and even led the empty-query list, so Enter launched "About Xfce".
+The scan now collects lines with a `SplitParser` (the shape omarchy's own
+`AppLibrary` uses) and ignores the exit status. Live: all-apps 78 -> 59, an
+`xfce` search 21 -> 3 results. The script is root-owned omarchy code, so the
+upstream fix would be `exit 0`/`return 0` at its end; there is no offscreen
+test because `Process` needs Quickshell. A `console.log` of
+`desktopHiddenIds` size at `onExited` is the quick way to re-check it (it was
+how the exit-1 cause was found; the earlier "StdioCollector race" theory was
+wrong and did not change the result).
+
+Failure-state UX slice (2026-10-06, unreleased, manifest still 1.22.0,
+offscreen only): `AiState.failureAdvice(message, attachment)` rewrites only the
+two known broker failures (provider sign-in, vanished attachment) into a
+headline + next step and keeps every other message verbatim as its detail;
+the vanished-file retry is "Try again without the file" and clears the
+attachment. `AiState.previewAdvice(error)` adds an `aiCsvPreviewHint` under the
+CSV preview error WITHOUT touching the allowlisted, test-pinned static error
+text or the Retry button (a retry rereads a changed file, so it stays). A
+failed turn renders its prompt via `AiAnswer.failed` at subtitle size instead
+of the display headline, the turn label is "Sent with ·" (the composer's
+pending file stays "Attached ·"), and idle `AiButton` text is 0.80, the
+opacity this file already records as the 4.5:1 qualification. A Codex
+sign-in failure also offers **Sign in to Codex** (`AiState.signInCommand`,
+fixed argv `omarchy-launch-terminal codex login`, Codex only; Hermes has no
+verified sign-in command so it gets guidance only; `AiService.signIn`). The
+broker copies ~/.codex/auth.json into its isolated home once per process, so
+`refresh_codex_auth()` now re-copies it before each Codex run ONLY when the
+user's file is newer than the copy (Codex rotates tokens inside the copy; an
+older source must never overwrite it), without creating another home. Live
+(after `omarchy restart shell`, 2026-10-06): hint, "Sent with", quiet failed
+headline, sign-in headline/buttons and footer contrast were seen on the real
+panel; the Sign in button was deliberately not clicked (it starts a real
+login). Offscreen: 167 main QtTests, 15 blocks / 23 visual / 12 answer, 196
+Python (2 skipped), isolated preview/service/detached checks, qmllint clean.
+A new `AiCsvPreview.qml` import of `AiState.js` was needed: lint would not have
+caught a missing one. Never run unfamiliar provider CLIs for `--help` here: `hermes
+--help` opened the Hermes desktop app.
+
+Codex-home sprawl (2026-10-06, fixed): each broker process made a `codex-*`
+home that nothing removed (146 dirs, ~260 MB). 66 were referenced by
+`interaction_state.handoffHome` (Continue in terminal resumes them); 80 were not.
+The broker now removes only its OWN home, only if it never emitted `done` (the
+sole carrier of `handoffHome`; `Broker.handed_off`), on `new` and exit, and a
+failed `prepare_codex` removes its half-built home. Old homes go through
+`python3 ai_broker.py --reap-homes` (dry run by default; `--apply --expect-count
+N`), never automatically. It reads a COPY of workspace.db (a read-only SQLite
+connection still leaves -wal/-shm), keeps homes named anywhere in saved
+interaction data, owned by a live broker (`.owner` pid+start), used as
+`CODEX_HOME` by a running process, or newer than 24 h, and refuses if the DB is
+missing/unreadable or Codex conversations exist with no recorded home. Never
+touches workspace.db or media. Run live on 2026-10-06 with approval: 78 removed
+(~90 MiB), 66 referenced homes intact. Not done on purpose: stripping auth.json
+from referenced homes (handoff has no auth refresh) and reusing a home across
+broker restarts (would change resume semantics; needs a live check). Tests:
+`HomeReaperTests`/`HomeLifecycleTests` in `tests/test_ai_broker.py`.
+
+Dynamic UI vocabulary (2026-10-10, offscreen; model: Codex pinned to `gpt-6.1-sol`): three new block types, one each per answer, soft-dropped when invalid. `actions` {title, options[{label<=40,hint<=60}] 2..6} (a tap sends the label as a follow-up via `AiService.submitChoice`: fixed prompt + `workspaceContext.choice`, state `act:<i>` {picked}, a FAILED answer reopens it), `compare` {title, options[{name,summary,facts<=4,pros<=4,cons<=4,recommended}] 2..4, verdict} (matrix >= 560 px else stacked cards; state `compare:<i>` {pin,hide[]} of RAW option indices, never all hidden; no scores), `timeline` {title, items[{label,when,minutes 0..1440,detail}] 2..16} (authored order; state `plan:<i>` {done[]}; Total only with >= 2 durations). Strings are cleaned to one line then capped; names/labels unique after NFKC casefold; `minutes` is a whole number (30.0 is rejected). Prompt guidance is `ai_catalog.BLOCK_GUIDE` (<= 140 B each); guards were raised on purpose (codex 13,000, hermes 15,000, full 26,000, `CODEX_OUTPUT_SCHEMA_BUDGET` 13,500 B; de-dup freed ~5.4k tokens/request): codex now 12,682 B. "Ask about this": `workspaceContext.focus` {turnId,blockIndex,kind,index -1..63,label<=80,detail<=240} (exclusive with `form`/`choice`, each <= 4 KiB, fixed envelope sentences, no system-prompt bytes); the service property is `focusTarget` (`Item.focus` is FINAL); `?` on a table row/step/gallery cell/diagram node/chart point/option/timeline row asks; the composer chip is layered on Esc (first Esc clears it). Traps: Qt refuses to clear `activeFocusOnTab` on the focused item (use `enabled`, or follow `onActiveFocusChanged`); a test id named `compare` shadows TestCase.compare(). Bench on Sol (live, 4 new prompts, run twice): actions 1/1, timeline 2/2 after the BLOCK_GUIDE/head rewording (before it Sol chose checklist/prose), compare 1/3 (table or prose-only otherwise: model variance, not a validator reject). Offline: 624 Python (2 skipped), 1702 main QtTests, 28/23/12 variants. NOT VERIFIED LIVE: the first real-panel check showed the compare block's heading and sources but NO block body in the peek card; the identical stored block renders at 466 px through AiAnswer and a full AiPane offscreen (plain and ListModel(dynamicRoles) turns), and a temporary yellow debug Text added to AiBlocks never appeared after hot reload, so the running shell appears to be serving stale QML: re-check after a real `omarchy restart shell` (a whole-shell restart was refused by the permission classifier in that session).
+
+Live pass, editable calc + scenarios + undo + export + duplicate (2026-10-10, real shell, real Codex, a 3-laptop block): block rendered (3 weight sliders with basis badges, toolbar Reset/Undo/Redo/Discard my edits (N)/Copy as CSV/Duplicate, grid with Add/Remove row, Scenarios (n)); Tab order composer -> summary -> slider/field x3 -> Copy as CSV -> Duplicate -> 'How is this calculated?' -> grid (ONE stop, `aiCalcGridScroll`) -> Add -> Remove -> Scenarios toggle -> name field -> ... -> Compare; grid Right+Return+typing edited Laptop A price 1200 -> 1000 (bold + edited diamond; score 54.44 -> 57.78, hand-checked); Ctrl+Z restored 1200/54.44 and Ctrl+Y brought 1000/57.78 back; two scenarios saved by keyboard (Base, Price heavy), compare view showed the differing input in bold and per-laptop scores (table edit applied to all scenarios); Copy as CSV put a correct CSV on the clipboard (inputs, cells with verbatim formula, the table with the edit, scenarios); Duplicate appended 'Copy of ...' as a new turn with the edit baked in and scenarios carried; a full shell restart restored all of it. KNOWN GAPS found live: (1) opening the compare view does not scroll it into view, and Page Down does not scroll the pane (the Down arrow does); (2) the CSV 'Scenarios' block lists the differing inputs and cells but NOT the per-table score rows that the on-screen compare shows; (3) `stateNotice` still has no UI. Not covered: mixed DPR, screen reader, mouse paths.
+
+Soft block failures (2026-10-10, offscreen): `normalize_response` now drops only blocks that fail `validate_block` or a cross-block rule (first diagram/slider/calc/form/gallery, 2 media and 6 blocks win; a slider without its diagram goes too) and keeps the answer, suggestions and every valid block with the generic warning 'Some parts of this answer could not be shown.' (never model text or the reason); whole-answer plain-text fallback remains ONLY for unparseable JSON, a bad envelope, or an unmeetable 64 KiB cap. `validate_response` stays strict and shares the cross-block rules (`_check_across_blocks`, `_complete`) so they cannot drift. This SUPERSEDES the earlier sentences that a calc/slider/form reject falls back the whole answer. Live 2026-10-09: the three-laptop calculator prompt once came back as prose with 'Response did not match the native answer schema'; 4 real re-runs (default x3, old catalogue x1) all produced a valid calc block, so the cause is unproven (a resumed session/snapshot context is untested); the one known unguided reject, `min()/max()` over a table column, is now stated in the prompt (codex 11,980 B, 20 B spare).
+
+Intelligent UI slice (2026-10-09; offscreen + 8 real Codex requests, form/waiting UI NOT live-verified; see plan section 1.1): (1) MEASURED: Codex 0.160.0 `exec --json` returns the whole structured answer as ONE item.completed at the end (no partial agent_message; 4.5 s greeting, ~11 s calc/gallery, all model time), so progressive block rendering only exists for Hermes; `streamed` is always false for Codex. (2) Prompts are per agent: `ai_catalog.system_instructions(agent)`: codex = prose + caps table (no schema dump; structure via --output-schema), hermes = prose + `compact_signature()`, other = full; budgets 12,000 / 14,000 / 23,100 B in tests/test_ai_prompt_budget.py (codex has 0 B spare: a new block must state its increment, or put its guidance in a dynamic envelope). (3) Codex DEDUP is ON by default (`LAUNCHER_CODEX_DEDUP=0` opts out): the catalogue travels once as `base_instructions`; the request carries a 195 B preamble; `context_bytes` charges what is sent. Live A/B n=8: -5,413 input tokens/turn at the old 21.5 KB catalogue, all answers accepted, same block types, wall time within noise; WATCH: in 2/2 explainer pairs the old setup used web search (sources block) and the new one did not (confounded with the catalogue change). (4) `validate_block` is the single per-block validator (final pass and any stream run identical code; ParityTests). (5) `form` block (G2): `AiForm.qml`, state `form:<blockIndex>` = {v:{id:value}, sent}; submit = fixed prompt 'Answers to the form on the previous answer.' + `workspaceContext.form` (<= 6 answers, 4 KiB; broker validates shape only and adds one fixed envelope sentence; labels are untrusted data); strings are SANITISED not rejected (control/bidi -> space); failed responses keep the form resendable. (6) Every turn gets a content-free `timing` on `done` and a row in `<state>/launcher-ai/metrics.jsonl` (200 lines, 0600); the service keeps a 50-entry ring (`timingSummary()`, p95 indicative under n=20); the pane shows the real phase + elapsed counter from 3 s (one 1 Hz timer, only while busy and visible). (7) Partial-turn seam exists but nothing emits it yet: `updateTurn` accepts `presentation{partial,from,blocks}`; a partial turn is never snapshotted; final events prune dead uiStates block keys. Not built: the stream compiler (`ai_stream.py`, for Hermes), maps, visual-quality evaluation, wiring `timingSummary()` into the status IPC, a UI for `stateNotice`. Live checklist: submit a form-eliciting prompt (bench mini-form-*), Tab walk, invalid number, send, see the rendered answers list, restart, Retry; the waiting counter at 3 s+; metrics.jsonl exists and holds no text; compare web-search use on 3 explainer prompts with dedup on/off.
+
+Editable calc data + scenarios (2026-10-09, OFFSCREEN ONLY, not live-verified: the display was asleep): edits are a different SPEC, not an engine change (golden 322 and fuzz fresh stay untouched). `AiCalcEdit.js` (pure: parseCell mirrors the engine's number rule exactly, setCell/addRow/removeRow/restoreRow/discardEdits, scenarios <= 3 input sets, `commit` refuses over 10 KiB, `bake` for Duplicate), `AiCalcView.js` (`build(block, dataKey)` so a slider move never recompiles; `scenarioResults`; stale/bad `_d`/`_s` are DROPPED and flagged, never clamped), `AiCalcExport.js` (Markdown keeps verbatim formulas; CSV guards formula injection with a leading apostrophe unless PLAIN_NUMBER; both <= 64 KiB), `AiCalcGrid.qml` (one roving Tab stop, <= 40x12 Text delegates + 1 TextField, invalid input never emitted), `AiCalcScenarios.qml` (compare <= 4 columns, 230 delegates worst case), `AiCalc.qml` (toolbar Undo/Redo/Reset/Discard/Copy as CSV/Duplicate; in-memory history 30 entries/100 KiB, 600 ms input coalescing, cleared when `saved` changes from outside; emits the FULL `calc:<i>` entry and ignores echoes of its own emits; Tab order is reading order), `AiService.copyText`/`duplicateCalc` (Duplicate = a NEW local turn, no provider call, scenarios kept and edits baked into the rows) and a guard that refuses a `setUiState` growing the whole uiStates map past 200 KiB (the store rejects 256 KiB for the WHOLE map and would silently lose every autosave) with `stateNotice` (no UI renders it yet). AiState copy/trail/depth consumers now go through `CalcView.run` ('Edited data', 'Scenarios' trail labels; stale input RESETS, no clamp). Traps: never rebuild a Repeater from inside the clicked button's own handler; the edit tool turns \u escapes into raw U+2028 (scan sources for raw U+2028/2029/0085/FEFF; ASCII + \u escapes only); QML wrappers fail Array.isArray (JSON-copy first). Live checklist: Tab walk (inputs, toolbar, grid one stop, add/remove, scenarios), type/commit/invalid cell, add/remove row, undo/redo, scenario save/compare/load/delete at the 660 px peek and detached, Copy as CSV + wl-paste, Duplicate, restart restores edits and scenarios, shell log. Not covered: mixed DPR, screen reader, a UI for `stateNotice`, source-bound `colstat` (design: gate on a present 'Full-source statistics' section), carry-over of edits into an AI revision.
+
+Review fixes round 3 (2026-10-09, offscreen; live re-check pending): an adversarial review of the CSV-source and calc work found and these now have mutation-checked tests: (1) `sourceId` rides a request only when `AiService.sourceAppliesTo(attachment)` holds (no attachment, or attachment === `sourceOrigin`), so file B's sample can no longer sit next to file A's whole-file statistics; (2) every keep failure after the worker returned an id calls `discardCopy` once (`source_unlink {removeDir:true}`; it removes the named src-* dir even with NO registry row and has NO owner check, so ids must stay random and fresh); client `columnCount` bound = the worker's 2**31; (3) restore opens and verifies the NEWEST source row first and unlinks older rows only after that; (4) the conversation budget is `CONVERSATION_BUDGET` = 192 KiB (error 'Conversation exceeds 192 KiB.'); `MAX_CONTEXT` 64 KiB is only the plain-text attachment cap; a kept-source turn re-charges about 30-42 KB (21.5 KB prompt + stats + snapshot), so expect roughly 4-6 follow-ups; (5) `discover_codex` skips a hung/failed probe and still tries the audited 0.160.0 install; (6) CSV numeric sort and stats share `clean_cell`/`numeric_key`; blank lines count for progress/supersede cadence; filter control characters are stripped; explorer cells with newlines show on one line with a return glyph; (7) calc engines: whitespace-only expression is 'empty' and `colstat(1.0,x)` is 'colstat-args' in both (golden now 322 cases). The earlier sentences saying the budget is 64 KiB are superseded by (4).
+
+Calc differential fuzz + decisions (2026-10-08): `tests/CalcFuzz.js` (1794 rows, seed in file) is GENERATED by `tests/gen_calc_fuzz.py` with Python's expected values; after ANY engine rule change run `python3 tests/gen_calc_fuzz.py` (`--check` says fresh/stale) or the fuzz tests fail as stale. The fuzz found 3 JS bugs and 4 Python crash classes; ten decisions D1-D10 are now pinned in the golden group "decisions" (golden is final at 315 cases): non-finite results from to/num/round/unit conversion are RANGE; aggregates over a TEXT column are TYPE even with zero rows; to()/num() need a [unit] group (else unit-position); a bare [unit] anywhere else is a parse fault that beats unknown-name; unit checks run before domain/range on quantities (sqrt(0-5[cm]) is UNIT); parse faults beat name/table/colstat-arg resolution; malformed spec shapes and missing ids are 'syntax' (a present invalid id is 'bad-id'); a non-number non-null input is TYPE; declared unit text is not trimmed; identical unit symbols cancel exactly first, then same-dimension symbols merge into the first-occurring one (3[km/h/s]*2[s] = 6.00 km/h); sumproduct reports the first error left to right. A fuzz row only goes on the generator's documented skip list for a genuine open question (5 multi-fault/shape rows today), never by loosening a comparison.
+
+Typed calc runtime (2026-10-08): `ai_calc.py` and `AiCalc.js` are two independent hand-written engines (units, lazy if/iferror, aggregates, DAG with Kahn order, error values, provenance) both checked against ONE golden table `tests/CalcGolden.js` (257 cases, hand/Fraction-verified; its header pins the rules and OQ1-18). Do not edit one engine without the other and the table. CLEAN rounds a 16th-digit tie away from zero in both (JS toPrecision behaviour). Model path: `ai_catalog._check_calc` (one `calc` block per answer; must evaluate error-free at initial, all-min, all-max and midpoint; a reject falls back the WHOLE answer exactly like an invalid slider formula - owner may change that; `colstat` rejected until source stats are supplied); the system prompt grew 16.1 -> 21.5 KB per request (guarded at 22 KB). Renderer `AiCalc.qml`: turn blocks arrive as QML wrappers where Array.isArray is false, so every consumer JSON-copies the block before `compileSpec` (AiState does too); state `calc:<blockIndex>` = changed inputs only `{id:{v,u}}`, Reset sends `{}`; a bad block shows one line "This calculation can't be shown."; table shows 12 rows until expanded. `textAnswer(turn, uiState)`, trail "Adjusted" and the depth context (`Inputs:` line) know calc; `calc` is a depth-action learning block (AiPane and `explainLatest` lists must match). Live (real model, 2026-10-08): "weights for a laptop" produced a valid calc block (3 weight inputs, 2-row table with a unit-aware score column, total cell) that accepted Codex's output schema and evaluated correctly by hand (37.00 vs 35.50 at weights 5/3/2). Live UI check (2026-10-08, after unlock): the block rendered with 3 weight sliders + typed fields + basis badges, disabled Reset, Total weight, a computed 2-row table (37.00 / 35.50); End on slider 0 gave weights 10/3/2, total 15 and scores 31.33 / 37.00 (hand-checked); the change survived a full shell restart (Reset became active). Not covered live: the provenance disclosure, typing into the number field, mouse paths, narrow peek card, mixed DPR.
+
+CSV preview polish (2026-10-08, live-verified): the 20 header type badges are ONE roving Tab stop (Left/Right/Home/End move, Space/Return/Down open the menu, Esc returns focus to the badge, Tab leaves). With a kept source on an expanded/detached surface the preview is a one-line summary ("CSV preview - 10 of unknown rows - 20 of 20 columns") with a Show/Hide toggle (detail lives in an inactive Loader); the peek card and the no-source case stay open. Live: composer -> explorer toggle 23 -> 4 Tab stops, card ~960 -> 300 px collapsed. The explorer's own 20 sort headers are still individual Tab stops; peek worst case and mixed DPR not re-measured.
+
+Durable CSV source, round 2 + live check (2026-10-07): `AiCsvExplorer.qml` (collapsed "Explore all rows", 25-row page, <= 25x20 delegates, sort cycling, literal filter, paging) is wired through `AiService` (one `csvSource`; keep flow budget -> register -> save -> `source_link`, replaced copy unlinked with `removeDir`; `sourceId` rides every submit while linked and ready), `AiPane` (own host before the first turn, in the conversation scroll after) and `AiCsvPreview` (Keep button). Test IPC `source keep|refresh|page <n>|view <sort> <dir> <filter>` (all four args required, pass '' fillers) and status `source*` fields. Live on the real shell, real worker, synthetic 100k x 20 file: register < 2 s, sort/page/filter correct (literal: "plain|nothing" matches 0), full shell restart restored the source and its workspace, typing a filter in the explorer by keyboard gave 11,063 then 100,000 rows, a live prompt for a MEDIAN was declined and a prompt for sum/mean returned the true values (-62,733 / -0.62733), deleting the workspace removed the 19 MB copy (`sourcesRemoved: 1`). Detached floor pin is 750-765 (Keep row). Known gaps: reaching the explorer by keyboard means Tabbing past every type badge (about 23 stops); the preview card stays tall above the explorer; peek-card worst case not re-measured; mixed DPR; disk-full/crash-mid-rename; an orphan complete `src-*` copy is possible if New chat lands during register (only `--reap-sources` lists it). Also fixed: `discover_codex` now accepts the exact audited Codex 0.160.0 install when `mise which codex` points at a newer build (a Codex update had silently disabled launcher AI); and WorkerTests no longer use a 0.15 s broker timeout, which flaked under load (only the timeout test sets it).
+
+Durable CSV source, backend round (2026-10-07, offscreen + scratch real-worker only; no UI yet): `ai_csv_source.py --serve` registers an explicit .csv by COPYING it to <state>/sources/src-<16hex>/ (data.csv, index.bin every 64th record, meta.json); complete (<= 64 MiB, 500k rows, 1 MiB lines) or absent; strict UTF-8, ragged fails registration; stats over all rows for the first 20 columns. Protocol: ordered JSON lines with ids; a view build is superseded by ANY queued request; `page` needs the latest view gen ("Stale view."); `columns` in meta.json equals the stats names (the broker's strict `load_source` requires it; pinned by BrokerContractTests). Registering is the only write; `--reap-sources` lists, and `--apply --expect-count N` removes only stale .tmp-*. Stress (LAUNCHER_STRESS=1, 100k x 20, 19.6 MB, tmpfs, shared box): register 0.62 s, worker RSS +25 MiB, view build ~0.25 s, supersede abort 5.5 ms, zero bytes during paging, idle exit 30.1 s; page p95 figures are client round trips. Store: `sources` registry table (no schema bump; one `workspace.db.pre-sources` copy when an older DB with workspaces gains it), ops source_link/unlink/list, delete and non-preserve prune remove the dirs after commit, preserve prune only stale .tmp-* and never a src-*. Broker: request `sourceId` -> "Full-source statistics" section (<= 12 KiB, sample shrinks to 50 rows), catalog allows only count/empty/min/max/sum/mean of listed columns as whole-file values (median etc. stay declined). Client: `AiCsvSource.qml` (SplitParser, lazy, stops 30 s after surfaces hide) + `CsvPage.js` validators; worker error text is never shown. Not covered: UI, live shell wiring, mixed DPR, disk-full/crash-mid-rename, a real model's reaction to the new catalog rule.
+
+Fresh-shell A/B (2026-10-07, one run, zero plugin reloads, shared-shell 1 Hz PSS, not isolated AI cost): after `omarchy restart shell`, never-opened A 472.1 MiB aggregate / 453.7 shell-only; after first AI entry B 472.9; after 20 more cycles C 458.8; no-activity control D 459.4. B-A +0.7, C-A -13.4, drift +0.6 (A was still decaying ~2.8 MiB/min, so deltas read slightly low). Same 7 processes / 186-189 fds / 17 threads at every plateau; store worker gone within ~25 s of close; broker and previewer never started. The 20 MiB idle-retained and zero-helper gates PASS within these limits, for an EMPTY conversation only (no answer, media or provider exercised); CPU/GPU unmeasured. Raw files were in /tmp/opencode/resource-2026-10-07 (tmpfs).
+
+Live check, CSV type correction + review fixes (2026-10-07, after `omarchy restart shell`): a 6-column mixed CSV showed abc / ? / date / abc / 123 / ? badges and the "inferred from the rows shown" note; Tab ran grid -> badges 0-5 -> answer; Space opened the Rent menu, Down+Return chose Number (badge accent, note "Corrected: 1", focus back on the badge, no turn sent); Remove returned the preview to idle; shell log clean. Not covered live: sending a corrected type to the model, the narrow peek card fit, mixed DPR.
+
+Resource qualification attempt (2026-10-06, manifest 1.22.0, shared Quickshell, Crimson Gold, DP-1 3440x1440 scale 1.25, load average about 20): shared-shell 1 Hz observations via `ai_resource_probe.snapshot`, NOT incremental AI cost. TRAP: edits to plugin files hot-reload the plugin in the live shell ("Local plugin changed, reloading" in the shell's log.log); the first run was discarded (shell PSS 235 to 307 MiB, threads 17 to 25 across reloads), later runs waited for 75 s of log quiet and had zero reloads. Clean runs: settled idle 334.7 MiB aggregate / 313.8 shell-only (7 processes, 186 fds, 17 threads); 50 open/`ai`/close cycles on the saved conversation, no provider call, peaked at 8-11 processes / 198 fds / 21 threads and returned exactly to 7/186/17 after the 35 s settle, no broker ever started, store worker gone 31.8 s after the last close. The 5 MiB plateau gate is MIXED: one run ended +18.8 MiB over the early plateau (a one-time unexplained step), the repeat ended -0.5 MiB and a 100 s idle control moved +0.3 MiB. IPC-timed warm open p95 204 ms to reveal >= 0.99 (not frame time; cold opens 169-200 ms). The 20 MiB idle-retained gate cannot be judged without a fresh-shell A/B. No IPC hook switches workspaces, so 20 switches are unmeasured. Not measured: GPU, frame pacing, local-control p95, attributable CPU, interact cycles, mixed DPR. Raw files: /tmp/opencode/resource-2026-10-06/ (tmpfs, will not survive a reboot).
+
+Independent-review fixes (2026-10-06, offscreen; live re-check pending): a
+read-only reviewer found, and these now carry regression tests: (1) the broker
+raises "Codex could not complete the answer. Check authentication..." for ANY
+provider error event, so the UI no longer asserts a sign-in cause: headline
+"Codex couldn't complete the answer", sign-in offered as a secondary action;
+only the broker's definitive "Sign in to Codex before using launcher AI." makes
+Sign in the primary action. (2) The fallback note shows only under a finished
+(`done`) answer, and a pinned conversation whose agent differs from a later
+default says "This conversation uses X; your default is Y. Start a new chat to
+switch." (3) The default-agent file is read like omarchy-default-agent: first
+line only, `[a-z0-9_-]{1,32}` (`AiState.parseDefaultAgent`), so a comment line or
+an invisible character cannot reroute the provider. (4) Try again no longer
+overwrites a newer attachment or a started draft. (5) New chat sets
+`resumeOnOpen = true` (the identical "ai: " query never fires the change
+handler). (6) `refresh_codex_auth` stages and renames, so a full disk cannot leave
+a truncated auth.json that looks newer than its source. (7) The sign-in command
+unsets CODEX_HOME and the button is disabled for 8 s after a click. (8) "Sent
+with" elides; the remaining 0.66-0.72 informational text moved to the 0.76
+floor. Accepted, NOT fixed: `refresh_codex_auth` and `prepare_codex` both follow
+a symlinked ~/.codex/auth.json (same uid, no privilege boundary, and dotfile
+setups need it); a restore completing after the person left AI mode can still
+set `resumeOnOpen` true; AiPane tests still use fixed `wait(20)`; the
+`AiService.submit()` fallback and `Broker.run()`'s refresh call have no
+end-to-end test (the helpers they use are pinned).
+
+Open-mode fix (2026-10-06, live-verified only): `LauncherPanel.open()` used
+`service.resumeOnOpen || turns.length > 0`, so once ANY answer existed every
+open landed in AI mode and the back arrow to app search never stuck.
+`resumeOnOpen` already tracks where the person left off (restore/new answer set
+it; `onQueryChanged` while open clears it when they leave AI mode), so `open()`
+now honors it alone. Checked through IPC after `omarchy restart shell`: fresh
+open stays in app search; `ai` then close/open resumes AI; an ordinary `query`
+then close/open stays in app search with `aiTurns` still 1. LauncherPanel
+needs Quickshell, so there is no offscreen regression: re-run that IPC
+sequence after touching open/close/query handling.
 
 Checkpoint 1.22.0 (2026-10-06, offscreen): local CSV preview + detached
 measured minimum delivered and reviewed. Green: **195 Python (2 skipped)**,
@@ -437,7 +857,7 @@ suite. It drives the RUNNING shell through `newchat`/`submit`/`status`, waits
 for each answer, waits out the save-settle race with a bounded retry that
 treats a stored pre-enrichment "Loading visual…" snapshot as unsettled, reads
 the newest artifact read-only from the workspace DB, evaluates the versioned
-30-prompt `bench-prompts.json` (`blocksAny`/`blocksNone`/`needsImages`
+33-prompt `bench-prompts.json` (`blocksAny`/`blocksNone`/`needsImages`
 expectations plus `maxSeconds` notes), prints per-prompt lines plus a JSON
 report with a by-kind summary, and exits non-zero when any prompt fails. Usage:
 `python3 ai_bench.py --prompts bench-prompts.json --limit 6 --out results.json`.
@@ -462,7 +882,7 @@ answer. Treat a block `loading` flag, or an `error` beginning "Loading visual",
 as unsettled and retry to a bounded deadline; a genuine provider error IS a
 settled state, not a placeholder (both pinned by
 `test_loading_placeholder_detection`). Expectation-calibration lesson: the
-first full 30-prompt pass scored 23/30 raw; the exploration re-runs (styles,
+first full 33-prompt pass scored 23/30 raw; the exploration re-runs (styles,
 birds, posters) came back clean and three mini-app results re-scored offline
 after budget/decision/recipe expectations were widened to the plan's own
 vocabulary — `checklist`/`steps`/`metric` were presentations the plan allows,
@@ -530,3 +950,40 @@ NOT incremental memory/PSS/native UI responsiveness. This is not the full
 100k dataset stress exit; paging, source persistence, type corrections and
 typed units/cycles runtime remain pending. Preserve all Phase 2 measurement
 limits when quoting this narrower foundation check.
+
+CSV column type correction (2026-10-06, unreleased, manifest still 1.22.0,
+offscreen only): `CsvTypes.js` (new, pure) infers number/date/text per displayed
+column from the preview rows only (at most 10 x 20, never the whole file, never a
+file read) and reports `unsure` or `empty` when it cannot say. Locale-honest on
+purpose: only a plain decimal point is a number; thousands separators, spaces,
+apostrophes, currency symbols/codes and accounting brackets make a column
+`unsure`; leading-zero strings and integers over 15 digits are text (postcodes,
+ids); 01/02/03 stays `unsure` unless a part above 12 proves the order; a column
+needs all non-empty cells to agree, else `text` ("mixed"). Month-name dates,
+booleans and `N/A`-style nulls are NOT recognised (text), the user corrects them.
+`AiCsvPreview` shows one real `Button` per header (`aiCsvPreviewType<N>`: "123",
+"date", "abc", "?", "-" plus a caret, accessible name and description say
+inferred vs corrected, basis counts and reason) that opens a four-item menu
+(Number/Date/Text/use inferred); Tab/Space/Return/arrows/Escape and the mouse all
+work, focus returns to the header, a focused header scrolls into view. The
+component only emits `columnTypeChosen`; `AiAttachmentPreview.typeOverrides` owns
+the corrections and clears them in the same `invalidate()`/`fail()`/new-read path
+as readiness (path, restore, workspace, new chat, retry), so they cannot outlive
+the read they describe and are never persisted. `AiService.submit` captures them
+BEFORE it consumes the attachment and sends `columnTypes` (<= 20 entries, enum
+or null) only for a ready CSV; there is no auto-send. The broker validates the
+field (exact `number|date|text`, <= 20, static error text, rejects it without a
+CSV attachment, before any provider run) and appends a fixed-sentence section
+whose JSON entries use the enum plus names from the broker's OWN fresh header
+read, control/format characters turned into spaces and clamped to 40 characters,
+never request strings. Limits: only corrections (not inferences) reach the model;
+columns are positional, so a file edited between preview and send can shift them
+(the names in the prompt show which header each applies to); a new type
+disclosure line grew the full-preview detached floor 669 -> 692 (15px text + 8px
+spacing), so both floor pins moved to 685-700 deliberately, and the peek card's
+old 718/720 worst-case fit above is now exceeded by about that line and was NOT
+re-measured; no live Wayland run, no mixed-DPR, no screen-reader pass. Tests:
+`tests/tst_CsvTypes.qml`, the type blocks in `tests/tst_AiCsvPreview.qml` /
+`tst_AiPane.qml`, the reset/transport blocks in `AiAttachmentPreviewCheck` /
+`AiPreviewServiceCheck`, and `test_ai_broker.py` (validation, context, hostile
+header). Not a full import, paging or whole-dataset inference.

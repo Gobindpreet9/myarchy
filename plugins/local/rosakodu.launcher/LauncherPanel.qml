@@ -78,7 +78,11 @@ Item {
     readonly property color foreground: Color.bar.text
     readonly property color background: Color.bar.background
     readonly property color accent: Color.accent
-    readonly property int cardWidth: root.aiMode && root.service && root.service.turns.length > 0
+    // A live kept source (ready or registering) is explorable before the
+    // first turn: it gives the pane content, an Expand action and room to grow.
+    readonly property bool aiSourceActive: !!root.service && !!root.service.csvSource
+        && (root.service.csvSource.status === "ready" || root.service.csvSource.status === "registering")
+    readonly property int cardWidth: root.aiMode && root.service && (root.service.turns.length > 0 || (root.aiSourceActive && root.aiExpanded))
         ? (root.aiExpanded ? Math.min(1100, Math.max(820, panel.width - 96)) : 820)
         : Satin.launcher.width
     // A short search should feel like a compact launcher, not an empty sheet.
@@ -385,7 +389,7 @@ Item {
     }
 
     function askFile(row) {
-        if (!root.service || !row || row.kind !== "file" || row.isDirectory) return
+        if (!root.service || root.service.workspaceTransitionPending || !row || row.kind !== "file" || row.isDirectory) return
         root.service.attachment = row.path
         root.query = AiState.prefix + "Explain this file"
         Qt.callLater(root.focusInput)
@@ -426,8 +430,8 @@ Item {
     function submitAi() {
         if (!root.service) return "no-service"
         var prompt = AiState.prompt(root.query)
-        if (root.service.busy || root.service.stopping) {
-            root.feedbackText = "Wait for the answer, or press Stop."
+        if (root.service.busy || root.service.stopping || root.service.workspaceActionPending) {
+            root.feedbackText = root.service.workspaceActionPending ? "Saving your workspace…" : "Wait for the answer, or press Stop."
             feedbackTimer.restart()
             return "busy"
         } else if (root.service.loadingLatest) {
@@ -470,10 +474,13 @@ Item {
         root.motionOriginFY = context.originFY
         root.motionOriginEdge = context.edge
         root.surfaceVisible = true
-        // A saved conversation resumes with its draft; a fresh entry (no
-        // turns yet, lazy restore in flight) stays in app search until the
-        // user or the restore brings the text in.
-        root.query = root.service && (root.service.resumeOnOpen || (root.service.turns && root.service.turns.length > 0))
+        // Resume AI mode only if that is where the person left off. The
+        // service tracks it (a restore or new answer sets it; leaving AI mode
+        // through the back arrow or editing the query clears it), so a past
+        // conversation alone must not pull every later open into AI. A fresh
+        // entry (lazy restore in flight) stays in app search until the user
+        // or the restore brings the text in.
+        root.query = root.service && root.service.resumeOnOpen
             ? AiState.prefix + (root.service.draft || "") : ""
         root.selectedIndex = 0
         root.launching = false
@@ -645,7 +652,7 @@ Item {
         }
         function newchat(): string {
             // Test-only: equivalent to pressing New chat in the toolbar.
-            if (!root.service || root.service.busy) return "busy"
+            if (!root.service || root.service.busy || root.service.workspaceActionPending) return "busy"
             root.service.newConversation()
             root.query = AiState.prefix
             return "ok"
@@ -653,7 +660,7 @@ Item {
         function submit(text: string): string {
             // Test-only: drive the exact submit path without keyboard input.
             if (!root.service) return "no-service"
-            if (root.service.busy || root.service.stopping) return "busy"
+            if (root.service.busy || root.service.stopping || root.service.workspaceActionPending) return "busy"
             if (root.service.loadingLatest) return "loading"
             if (root.service.attachmentBlocked)
                 return root.service.previewStatus === "error" ? "attachment-error" : "previewing"
@@ -691,6 +698,31 @@ Item {
             root.service.setUiState(root.service.latest.id, key, next)
             return "ok:" + next + "/" + count
         }
+        function source(op: string, a: string, b: string, c: string): string {
+            // Test-only driver for the durable CSV source (no UI needed):
+            //   keep               = the "Keep full data" button on the current ready CSV
+            //   refresh            = the "Refresh" notice action
+            //   page <n>           = go to page n (0-based) of the current view
+            //   view <sort> <dir> <filter> = sort column (-1 none), dir 1|-1, filter text
+            // Answers are fixed words; no path or content is ever returned.
+            if (!root.service) return "no-service"
+            var client = root.service.csvSource
+            if (op === "keep") {
+                if (!root.service.keepOffered) return "not-offered"
+                return root.service.keepFullData() ? "started" : "rejected"
+            }
+            if (op === "refresh") return root.service.refreshSource() ? "started" : "rejected"
+            if (op === "page") {
+                var page = parseInt(String(a || ""), 10)
+                return isFinite(page) && client.goPage(page) ? "ok" : "rejected"
+            }
+            if (op === "view") {
+                var sort = parseInt(String(a || "-1"), 10)
+                var dir = parseInt(String(b || "1"), 10)
+                return isFinite(sort) && client.setView(sort, dir, String(c || "")) ? "ok" : "rejected"
+            }
+            return "unknown-op"
+        }
         function expand(): string {
             // Test-only: toggle the Explore surface.
             root.aiExpanded = !root.aiExpanded
@@ -719,6 +751,12 @@ Item {
                 columnsTruncated: root.service && root.service.previewData ? root.service.previewData.columnsTruncated : false,
                 cellsTruncated: root.service && root.service.previewData ? root.service.previewData.cellsTruncated : false,
                 previewError: root.service ? root.service.previewError : "",
+                sourceStatus: root.service ? root.service.sourceStatus : "idle",
+                sourceRows: root.service && root.service.csvSource.meta ? root.service.csvSource.meta.rows : -1,
+                sourceViewRows: root.service ? root.service.csvSource.viewRows : -1,
+                sourcePage: root.service && root.service.csvSource.page ? root.service.csvSource.page.page : -1,
+                sourceNotice: root.service ? root.service.sourceNotice : "",
+                sourceError: root.service ? root.service.sourceErrorText : "",
                 brokerIdle: root.service ? root.service.brokerIdleCheck() : false,
                 brokerRunning: root.service ? root.service.brokerLive : false,
                 aiTurns: root.service ? root.service.turns.length : 0,
@@ -729,6 +767,7 @@ Item {
                 focus: dimmer.focusName,
                 windowOpen: workspaceWindow.visible,
                 workspaceId: root.service ? root.service.workspaceId : "",
+                workspaceActionPending: root.service ? root.service.workspaceActionPending : false,
                 workspaceIndex: root.service ? root.service.workspaceIndex.length : 0,
                 cardWidth: root.cardWidth,
                 cardHeight: root.cardHeight,
@@ -828,9 +867,16 @@ Item {
         id: hiddenEntryScan
         running: false
         command: [root.omarchyPath + "/shell/services/hidden-entries.sh", root.desktopNames]
-        stdout: StdioCollector { id: hiddenEntryOutput; waitForEnd: true }
+        // Same shape as omarchy's own AppLibrary scan: collect lines as they
+        // arrive and use them whatever the exit status. hidden-entries.sh
+        // exits 1 on success (its last line tests a missing ~/.nix-profile
+        // dir), so trusting only exit 0 discarded a correct list and showed
+        // desktop-specific entries (XFCE-only apps) on Hyprland.
+        property string scanText: ""
+        stdout: SplitParser { onRead: function(line) { hiddenEntryScan.scanText += line + "\n" } }
+        onStarted: hiddenEntryScan.scanText = ""
         onExited: function(exitCode) {
-            root.desktopHiddenIds = exitCode === 0 ? root.hiddenIdMap(hiddenEntryOutput.text) : ({})
+            root.desktopHiddenIds = root.hiddenIdMap(hiddenEntryScan.scanText)
             root.rebuildEntryCache()
             root.rebuildResults()
         }
@@ -1034,7 +1080,7 @@ Item {
                             anchors.verticalCenter: parent.verticalCenter
                             visible: root.query.length === 0
                             text: root.appLibraryReady ? "Search apps · f: files · ai: ask" : "Loading applications…"
-                            color: Util.alpha(root.foreground, 0.48)
+                            color: Util.alpha(root.foreground, 0.76)
                             font.pixelSize: Satin.type.search
                             elide: Text.ElideRight
                         }
@@ -1116,7 +1162,7 @@ Item {
                             Text {
                                 anchors.centerIn: parent
                                 text: root.aiMode ? (root.service && root.service.busy ? "…" : "send") : "esc"
-                                color: Util.alpha(root.foreground, 0.58)
+                                color: Util.alpha(root.foreground, 0.76)
                                 font.pixelSize: Satin.type.label
                             }
                             MouseArea {
@@ -1158,13 +1204,16 @@ Item {
                         prompt: AiState.draft(root.query)
                         busy: root.service && root.service.busy
                         stopping: root.service && root.service.stopping
-                        loading: root.service && root.service.loadingLatest
+                        loading: root.service && (root.service.loadingLatest || root.service.workspaceActionPending)
+                        enabled: !root.service || !root.service.workspaceTransitionPending
                         attachmentBlocked: !!root.service && typeof root.service.attachmentBlocked !== "undefined"
                             && root.service.attachmentBlocked
                         hasConversation: root.service && root.service.turns.length > 0
+                        focusLabel: root.service && typeof root.service.focusLabel === "string" ? root.service.focusLabel : ""
                         foreground: root.foreground
                         background: root.background
                         accent: root.accent
+                        onFocusCleared: { if (root.service && typeof root.service.clearFocus === "function") root.service.clearFocus() }
                         onEdited: function(text) { root.query = AiState.prefix + text }
                         onSubmitted: root.submitAi()
                         onHideRequested: root.dismiss()
@@ -1188,7 +1237,7 @@ Item {
                             anchors.left: parent.left
                             anchors.top: parent.top
                             text: "RECENTS"
-                            color: Util.alpha(root.foreground, 0.54)
+                            color: Util.alpha(root.foreground, 0.76)
                             font.pixelSize: Satin.type.header
                             font.weight: Font.DemiBold
                             font.letterSpacing: 1.4
@@ -1259,7 +1308,7 @@ Item {
 
                     AiPane {
                         id: aiPane
-                        visible: AiLayout.paneVisible(root.aiMode, root.service)
+                        visible: AiLayout.paneVisible(root.aiMode, root.service) || (root.aiMode && root.aiSourceActive)
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         service: root.service
@@ -1279,6 +1328,8 @@ Item {
                         }
                         onHandedOff: root.dismiss()
                         onHideRequested: root.dismiss()
+                        // "Ask about this" on a part: the question is typed next.
+                        onComposerFocusRequested: root.focusInput()
                     }
 
                     Text {
@@ -1297,7 +1348,7 @@ Item {
 
                         Text {
                             text: root.query.length > 0 ? "RESULTS" : "ALL APPLICATIONS"
-                            color: Util.alpha(root.foreground, 0.54)
+                            color: Util.alpha(root.foreground, 0.76)
                             font.pixelSize: Satin.type.header
                             font.weight: Font.DemiBold
                             font.letterSpacing: 1.4
@@ -1307,7 +1358,7 @@ Item {
 
                         Text {
                             text: root.resultRows.length + (root.resultRows.length === 1 ? " result" : " results")
-                            color: Util.alpha(root.foreground, 0.42)
+                            color: Util.alpha(root.foreground, 0.76)
                             font.pixelSize: Satin.type.label
                         }
                     }
@@ -1470,7 +1521,7 @@ Item {
                                         ? FileSearch.displayParent(resultRow.modelData.parent, root.homePath)
                                         : AiState.workspaceSubtitle(resultRow.modelData.updatedAt)
                                     textFormat: Text.PlainText
-                                    color: Util.alpha(root.foreground, 0.50)
+                                    color: Util.alpha(root.foreground, 0.76)
                                     font.pixelSize: Satin.type.meta
                                     elide: Text.ElideMiddle
                                 }
@@ -1518,7 +1569,7 @@ Item {
                                 text: root.fileMode ? (root.fileError || (root.fileTerms.length < 2
                                     ? "Type at least two characters after f:." : "Searches names and paths in your home folder."))
                                     : root.appLibraryReady ? "Try a name or keyword." : "Reading installed desktop entries."
-                                color: Util.alpha(root.foreground, 0.50)
+                                color: Util.alpha(root.foreground, 0.76)
                                 font.pixelSize: Satin.type.meta
                             }
                         }
@@ -1533,7 +1584,7 @@ Item {
                         Text {
                             text: root.feedbackText || (root.fileMode ? "enter open   alt+enter reveal   ctrl+c path"
                                 : "↑↓ navigate   enter launch   tab advance   esc close")
-                            color: root.feedbackText ? root.accent : Util.alpha(root.foreground, 0.45)
+                            color: root.feedbackText ? root.accent : Util.alpha(root.foreground, 0.76)
                             font.pixelSize: Satin.type.label
                             font.weight: root.feedbackText ? Font.DemiBold : Font.Normal
                         }
@@ -1542,7 +1593,7 @@ Item {
 
                         Text {
                             text: root.fileMode ? "Files" : "Launcher"
-                            color: Util.alpha(root.foreground, 0.34)
+                            color: Util.alpha(root.foreground, 0.76)
                             font.pixelSize: Satin.type.label
                         }
                     }

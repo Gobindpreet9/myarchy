@@ -63,6 +63,9 @@ ShellRoot {
         property bool busy: false
         property bool stopping: false
         property bool loadingLatest: false
+        property bool workspaceActionPending: false
+        property bool workspaceTransitionPending: false
+        property string workspaceDisplayTitle: "New workspace"
         property bool attachmentBlocked: false
         property bool canContinue: false
         property bool windowActive: false
@@ -73,6 +76,10 @@ ShellRoot {
         property string previewStatus: "idle"
         property var previewData: null
         property string previewError: ""
+        // A ready, unkept CSV offers the explicit "Keep full data" action.
+        property bool keepOffered: true
+        property bool canKeepFullData: true
+        function keepFullData() { }
         property var checklistStates: ({})
         property var turns: []
         property var uiStates: ({})
@@ -118,6 +125,28 @@ ShellRoot {
         window.height = 560
         actions = [
             function() {
+                var composer = check.findByName(check.window.contentItem, "aiWorkspaceWindowComposer")
+                var heading = check.findByName(check.window.contentItem, "aiWorkspaceWindowTitle")
+                check.eq(composer !== null && heading !== null, true, "named window controls exist")
+                stubService.workspaceDisplayTitle = "Illustrative reusable tool"
+                check.eq(check.window.title, "AI Workspace · Illustrative reusable tool", "window title follows the explicit name")
+                check.eq(heading.text, "Illustrative reusable tool", "heading follows the explicit name")
+                stubService.draft = "A draft"
+                check.eq(composer.canSubmit, true, "ready named workspace can submit")
+                stubService.workspaceActionPending = true
+                check.eq(composer.canSubmit, false, "pending workspace action gates Send and Enter")
+                check.eq(composer.enabled, true, "save/clone phases still allow draft edits")
+                stubService.draft = "Edited while saving"
+                check.eq(composer.prompt, stubService.draft, "the edited draft stays visible")
+                stubService.workspaceTransitionPending = true
+                check.eq(composer.enabled, false, "only final hydration freezes the original composer")
+                stubService.workspaceTransitionPending = false
+                stubService.workspaceActionPending = false
+                stubService.draft = ""
+                stubService.workspaceDisplayTitle = "New workspace"
+                check.next()
+            },
+            function() {
                 check.delay(function() {
                     check.eq(Math.round(check.window.minimumSize.height), 560,
                         "a plain detached window keeps the declared floor")
@@ -129,9 +158,9 @@ ShellRoot {
                     check.until(function() { return check.window.minimumSize.height > 560 },
                         function(ok) {
                             check.eq(ok, true, "full preview chrome raises the measured floor above 560")
-                            check.eq(check.window.minimumSize.height >= 660
-                                && check.window.minimumSize.height <= 680, true,
-                                "real-window floor stays in the pinned band around 669, got "
+                            check.eq(check.window.minimumSize.height >= 735
+                                && check.window.minimumSize.height <= 780, true,
+                                "real-window floor covers both system-font metrics (745/757); disclosure containment is checked below, got "
                                 + check.window.minimumSize.height)
                             if (!ok) { check.finish(); return }
                             check.until(function() {
@@ -154,6 +183,14 @@ ShellRoot {
                         var bottom = disclosure.mapToItem(check.window.contentItem, 0, disclosure.height).y
                         check.eq(bottom <= check.window.contentItem.height, true,
                             "disclosure bottom " + bottom + " fits inside window height "
+                            + check.window.contentItem.height)
+                    }
+                    var keepNote = check.findByName(check.window.contentItem, "aiCsvPreviewKeepNote")
+                    check.eq(keepNote !== null && keepNote.visible, true, "the Keep full data disclosure renders")
+                    if (keepNote) {
+                        var keepBottom = keepNote.mapToItem(check.window.contentItem, 0, keepNote.height).y
+                        check.eq(keepBottom <= check.window.contentItem.height, true,
+                            "Keep disclosure bottom " + keepBottom + " fits inside window height "
                             + check.window.contentItem.height)
                     }
                     var loader = check.findByName(check.window.contentItem, "aiCsvPreviewLoader")

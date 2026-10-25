@@ -8,6 +8,23 @@ global keybinding.
 
 ---
 
+## OpenUI integration work
+
+A separate working prototype lives in `~/Work/launcher-openui/launcher/`.
+It is an internal development harness, **not a separate product or a step users
+should need to launch**. Intelligent UI belongs inside the native launcher's
+existing AI pane, composer and saved workspaces. A renderer-only adapter now
+exists, but native embedding is not delivered yet. Native conversations remain
+untouched. See `AI_WORKSPACE_PLAN.md` §3.4 for the comparison, host compatibility
+checks and remaining integration gates.
+
+Development checkpoints are on the owner's `feat/launcher-openui-native`
+branch. Run `python3 -B tests/run_offline.py` from this plugin directory for
+the Python, QML and isolated Quickshell checks. Every check uses a fresh private
+scratch HOME/XDG tree under `/tmp/opencode`; no provider or live workspace is
+needed. Logs are retained there for diagnosis. These offscreen checks do not
+qualify live Wayland or mixed-DPR behaviour.
+
 ## ✨ Features
 
 - **Theme-aware surface in all modes** — floating card with matte gradient, hairline
@@ -60,6 +77,9 @@ global keybinding.
   through**, **Scrubbed**, **Sorted**, **Filtered**, **N examples replaced**
   or **Depth added**. It is derived only from saved interaction state, so it
   restores with the workspace; untouched answers show nothing.
+- **Reusable workspaces** — **More → Rename…** gives a saved tool a searchable
+  name; **More → Duplicate…** copies its answers and local inputs into an
+  independent workspace with a fresh AI conversation, not a conversation branch.
 - **Names-only result rows** — each row shows the clean application name. No
   desktop IDs or technical subtext are displayed. Short searches collapse the
   card to their results; longer lists scroll within the full-size card.
@@ -103,9 +123,12 @@ global keybinding.
 | **Adjust explanation depth** | **Simpler** / **More depth** / **Another example** under the latest learning answer |
 | **Sort a comparison table** | `Tab` to a column header and press `Return` / `Space`, or click it: ascending → descending → authored order |
 | **Filter comparison-table rows** | `Tab` to the filter field (tables of four or more rows) and type; the row count updates live |
+| **Ask about one part of an answer** | on the latest finished answer, hover a table row, gallery tile, step, selected diagram node or chart point and choose **Ask**; by keyboard, `Tab` to the table rows (one stop, `Up`/`Down` choose a row), a step, a gallery cell, a diagram node or the chart and press `?`. The composer shows **About: ...** and the next question carries that part; `Esc` (or **x**) removes it before anything is sent |
 | **New AI chat** | **New chat** in the answer toolbar |
 | **Expand / collapse the AI workspace** | **Expand** / **Collapse** in the answer toolbar |
 | **Reopen a saved workspace** | search for its title or summary; the **Workspace · date** row opens it |
+| **Name a workspace** | **More → Rename…**; enter a name and choose **Save** |
+| **Copy a workspace** | **More → Duplicate…**; review the name and choose **Duplicate** |
 | **Open the workspace in a window** | **More → Open in window** in the answer toolbar |
 | **Close** | `Esc`, or click outside the card |
 
@@ -149,7 +172,50 @@ While collapsed, earlier turns are not instantiated at all: their native
 answer trees, images and delegates are released, expanding history
 materialises them again, and collapsing releases them once more.
 **More** contains the text/interface view toggle, **Open in window**, and
-**Continue in terminal**.
+**Continue in terminal**, plus **Rename…** and **Duplicate…**.
+
+**Names and copies.** The themed, keyboard-accessible dialogs accept a non-empty,
+trimmed, plain single-line name of at most 96 UTF-16 code units (an emoji can
+use two). The saved name survives draft-only saves, full saves and restoration,
+and is used in launcher search and the detached window; answer headings are
+unchanged. **Duplicate** opens an independent copy with the turns, checklists,
+local UI state (including adjusted calculation inputs), draft and attachment.
+Artifacts receive new identities and each starts with a new revision checkpoint;
+the original revision history is not copied. Cached image references stay
+unchanged. A kept CSV copy belongs only to the original: neither its registry
+link nor its full-data resource is shared or cloned.
+
+The original stays saved with its provider session and terminal handoff home.
+The duplicate starts with both blank: its first future provider prompt does
+**not** reconstruct the copied conversation history. This is local tool reuse,
+not full AI conversation branching or state-aware AI revisions. Actions wait for
+a confirmed save before the backend mutation; duplication also confirms edits
+made to the original during the action before switching to the copy. They are
+gated while busy, stopping, loading, keeping data or another workspace action
+is pending, and do not prune workspaces. Editing pauses briefly only while the
+copy opens; if opening fails, the original stays open. An open naming dialog
+closes if you switch workspaces, so it cannot rename a different tool.
+
+**Codex homes.** Each Codex broker process builds a private home under
+`launcher-ai/codex-*` (a copy of `~/.codex/auth.json`, the model catalog and
+Codex's own session rollouts). A saved workspace records its home as
+`handoffHome` so **Continue in terminal** can `codex resume` it, so a home can
+be needed long after its broker exits. The broker therefore removes only its
+own home, and only if it never sent a `done` event (the sole carrier of
+`handoffHome`), including a half-built home after a failed sign-in. Older
+homes are cleaned by an explicit tool that nothing runs automatically:
+
+```bash
+python3 ai_broker.py --reap-homes                              # dry run: lists every home and why
+python3 ai_broker.py --reap-homes --apply --expect-count N     # removes exactly the N you approved
+```
+
+It keeps any home a workspace names (anywhere in its saved interaction data),
+any home owned by a live broker or used as `CODEX_HOME` by a running process,
+and anything touched within `--min-age-hours` (default 24). It reads a private
+snapshot of `workspace.db`, never writes to it, never touches `media/`, and
+refuses to run if the database is missing, unreadable, or lists Codex
+conversations that record no home. `--limit` bounds one run (default 200).
 
 Conversations are saved locally as workspaces (SQLite under
 `~/.local/state/omarchy/launcher-ai/`, or `$XDG_STATE_HOME`) and survive shell
@@ -208,9 +274,9 @@ covered — depth explanations included. Provider processes load `ai_broker.py`
 at spawn, so guidance edits apply to the next broker start (idle retirement or
 shell restart). `status` exposes the gate as `brokerIdle` and `brokerRunning`.
 
-New launcher Codex chats use **`gpt-6-luna`**, independently of the model in
+New launcher Codex chats use **`gpt-6.1-sol`**, independently of the model in
 `~/.codex/config.toml`; the global Codex configuration is not changed. Existing
-chats retain their prepared model and session. If `gpt-6-luna` is missing from
+chats retain their prepared model and session. If `gpt-6.1-sol` is missing from
 Codex's cached catalog, the launcher reports an error rather than substituting
 another model; open Codex once to refresh the catalog.
 
@@ -280,15 +346,23 @@ non-empty filter counts, and unknown state keys are ignored.
 There is no full HTML renderer, embedded browser or script execution. Checklist
 selections are retained by the service within the same session.
 **Copy** copies plain text, including chart point data, image credits and source
-URLs; **More → Show as text** switches to that text representation. Invalid
-structured answers fall back to plain text with a warning; visual failures show
-an error rather than invented images or prices and leave the answer usable.
+URLs; **More → Show as text** switches to that text representation. A
+structured block that fails validation is dropped on its own (the answer text
+and other valid blocks stay, with a short warning). Unparseable output, an
+invalid envelope or an answer that cannot meet the 64 KiB cap still falls back
+as a whole. Visual failures show an error rather than invented images or prices
+and leave the answer usable.
 
-Answers use an editorial layout: a clear title and selectable summary come
-first. At answer widths of at least 620 pixels, the first contextual image sits
-to the right of that text; narrower layouts stack it below. Supporting blocks
-follow, with labeled source buttons at the bottom. The card sizes to the
-measured rendered answer height, capped at 720 pixels with scrolling.
+Practical answers are **task-first workspaces**, not prose with a tool underneath:
+the tool's title and short orientation lead into the main comparison, calculator,
+plan, form or learning object. Long prose has an explicit **Read full explanation**
+disclosure; Copy and Show as text still include the complete answer. Supporting
+material follows, with sources last. Wide learning layouts put the diagram and
+its linked control alongside each other; wide forms can have a context rail.
+Narrow layouts reflow without resetting the tool. Plain/image briefs keep the
+editorial layout: at widths of at least 620px the first image sits beside the
+text, otherwise below it. The card sizes to measured content, capped at 720px
+with scrolling.
 
 Enter `ai:`, then try:
 - `Tell me about Stanley Park.`
@@ -393,6 +467,51 @@ explorer; the launcher's separate local CSV preview (below) is a bounded review
 surface that also never claims to hold the full dataset. A provider-authored
 native table remains a bounded answer, not the source dataset.
 
+**Forms.** When an answer needs several typed details from you (dates, a budget, a count), the
+model can show a small form: numbers, choices, text and toggles with validation. Your answers
+are sent as one follow-up that lists exactly what you entered, and your draft is kept across
+restarts. **While it works**, the panel shows the real phase (thinking, searching the web) and
+an elapsed counter after 3 seconds; answers from Codex arrive whole, not progressively.
+
+**Choices, comparisons and plans.** An answer can offer bounded action buttons
+that send a chosen follow-up, a comparison with locally pinned/hidden options,
+or an authored-order timeline with completion checks and a duration total when
+at least two durations are supplied. Comparisons lead with the AI's authored
+recommendation and trade-offs. When columns would be too narrow, a shortlist
+shows every candidate and one inspected detail view. Selecting a name only
+inspects; **Continue with…** explicitly sends an AI follow-up. Plans put progress
+and the first unfinished item first, with a jump to its actual row. Completion
+never invents or reschedules clock times. **Ask about this** targets a part of the
+latest answer in the composer; the next explicit question carries that context,
+not an instruction to rewrite the original answer. These controls have offline
+coverage; their live interaction qualification is still pending (see Tests).
+
+**Calculations.** For numbers you can vary (weights, rates, a budget), the model can
+author one `calc` block: numeric inputs with sliders and typed values (each marked
+assumption, provided or sourced), computed tables, and derived cells with units. Every
+number can show its formula, inputs and units under "How is this calculated?"; errors show
+as an em dash with the reason, never a silent zero. Money is an ISO currency code and
+cross-currency math needs an explicit rate input. Values you change persist with the
+conversation. The math runs locally in a small hand-written engine with strict limits.
+You can edit table cells (decimal point only, invalid values are refused with a message),
+add or remove rows, save up to three named input scenarios and compare them side by side,
+undo and redo while the view is open, copy the values as CSV, and duplicate a calculation
+as a new editable copy.
+Scenario exports are not yet equivalent to the on-screen comparison: CSV omits
+per-table formula results, and copied Markdown also omits differing scenario
+inputs. Opening comparison does not yet scroll it into view, pane PageDown is
+missing, and the whole-workspace saved-edit limit has no visible refusal notice.
+
+**Keep full data.** After the local preview is ready, **Keep full data** explicitly
+copies the `.csv` (up to 64 MiB / 500,000 rows) into private launcher storage
+(`<state>/sources/src-<id>/`) and indexes it once. Expand the panel to open
+**Explore all rows**: 25 rows per page, whole-file sort (by character code) and
+literal substring filter, exact row counts, First/Prev/Next/Last and Go to row.
+The model then also receives exact whole-file count, empty count, min, max, sum
+and mean for the first 20 columns; medians, quantiles, correlations and group-bys
+are declined, not guessed. The copy belongs to its conversation and is removed
+when that conversation is deleted; nothing automatic ever deletes conversations.
+
 Attaching a file whose name ends in `.csv` also starts a separate **local
 preview** for review before sending: the pane shows *Reading CSV…*, then a
 bounded grid of at most 10 rows × 20 columns (80 Unicode codepoints per cell)
@@ -493,6 +612,62 @@ synchronously. It is not a model-granted file tool; users still attach via `f:`
 
 ## 🧪 Tests
 
+Custom UI visual checks (2026-10-23): `tests/AiTaskVisualCheck.qml` renders actual
+native answer components with illustrative decision/plan/form fixtures at
+420/760/980px, restored plan progress and light/Crimson Gold palette variants.
+The screenshots `/tmp/opencode/ai-task-*.png` were read and inspected. Inspection
+and restoration emit no provider action. These are offscreen checks, not a live
+provider-quality, Wayland or mixed-DPR pass. The transition regression in
+`tests/tst_AiComposition.qml` fails on QML warnings when replacing task shapes.
+Final offline verification: **630 Python tests (2 skipped), 1,765 main QtTests,
+28 blocks / 23 visual / 12 answer / 6 task-visual**, with all eight isolated
+checks listed below passing. Image/task/text transitions have warning-failing
+regressions; known Qt lint/Python resource warnings remain. Logs:
+`/tmp/opencode/launcher-task-finish-i4v22dwg/`. No release or repository sync.
+
+Resume verification (2026-10-22; installed tree, unreleased additions, manifest
+still **1.22.0**): **624 Python tests (2 skipped), 1,710 main QtTests,
+28 blocks / 23 visual / 12 answer**, all green. The main total includes eight
+new strict-equality helper checks. All eight isolated checks passed:
+`AiServiceCheck`, `AiWorkspaceStoreCheck`, `AiWorkspaceContextCheck`,
+`AiSeamsServiceCheck`, `AiCsvSourceCheck`, `AiAttachmentPreviewCheck`,
+`AiPreviewServiceCheck`, `AiDetachedWindowCheck`. Runs used fresh scratch
+HOME/state/runtime/cache/config, offscreen/software rendering and unset
+`LAUNCHER_*` flags; no real provider or live user state was used. Existing
+Python `ResourceWarning`s remain. Test-only fixes use
+`verify(TestJson.equal(...))` (`tests/TestJson.js`, with `tst_TestJson.qml`
+regressions): strict recursive leaf types/values, exact numbers and array order,
+ignoring only object key order. A 1e-6 numeric difference is explicitly rejected;
+this avoids both QVariant key reordering and QtTest's numeric tolerance.
+The fake Codex fixture was also repaired/isolated
+after `new` clears its prepared state; no product feature was built.
+Recorded evidence is in `/tmp/opencode/launcher-status-20261022-6ts2myhe/`:
+`python-final.log`, `qml-final.log`, `blocks-final.log`, `visual.log`, `answer.log`
+and each `<Checkname>.log` (earlier logs record pre-fix failures).
+
+The October 8 checkpoint was not the latest implementation: October 9–10 added
+calc edits/scenarios/undo/export/local duplication, forms, actions/comparison/
+timeline, selected-part follow-ups, Codex prompt de-duplication/timing and soft
+block failures. The recorded October 10 live calc pass covered keyboard grid
+editing, undo/redo, scenario save/compare, CSV copy, local duplication and restart
+restore; it did not close the comparison reveal/paging, export-parity or visible
+`stateNotice` gaps. Dynamic-control/focus live clicks and the compare-body/stale-QML
+issue remain unqualified. Mixed DPR and a Phase 3 exit are not claimed.
+Canonical `~/Work/myarchy` remains clean at launcher commit `0a4ba8e`
+(October 6); the initial audit found 94 installed files different/new before
+the new test-helper files. No sync, release, commit or push was performed.
+The dated checkpoints below are historical, not current
+suite totals. See `AI_WORKSPACE_PLAN.md` for the reconciled remaining work.
+
+Reusable-tools slice (2026-10-08, unreleased; manifest unchanged): offline
+verification passed 418 Python tests (two skipped; existing `ResourceWarning`s
+remain), 1,077 main QtTests, isolated service and real-store checks
+in scratch HOMEs, and the detached-window check. Wide Rename and narrow Duplicate
+form screenshots were read and manually inspected using mock/offscreen surfaces,
+not the live shell. Independent review findings received regression fixes;
+live Rename/Duplicate qualification remains pending. These results do not imply a release, repository sync or new
+Wayland/mixed-DPR qualification.
+
 The reviewed 1.21.2 checkpoint fixes workspace switching/loading races, 20-turn
 content persistence, private storage and the shared media budget. Thin saves
 preserve omitted content; full snapshots explicitly retire obsolete keys.
@@ -519,6 +694,7 @@ QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunn
 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunner -input tests/AiBlocksCheck.qml
 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunner -input tests/AiVisualCheck.qml
 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunner -input tests/AiAnswerCheck.qml
+QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunner -input tests/AiTaskVisualCheck.qml
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p 'test_*.py'
 QT_QPA_PLATFORM=offscreen quickshell -p FileSearchProcessCheck.qml
 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software quickshell -p AiServiceCheck.qml
@@ -646,9 +822,12 @@ columns (14,989,091 bytes). Snapshot time was 0.202 s, returning 140 prefix rows
 in 22,157 JSON bytes with `totalRows: null`; process peak RSS was 82,020 KiB,
 including the full Python process and fixture generation, not incremental
 memory or PSS. Record: `/tmp/opencode/csv-sampling-stress.json`. This does not
-qualify native UI responsiveness or the full 100k-row dataset exit gate. Paging,
-source persistence, type corrections and the typed units/cycles runtime remain
-pending.
+qualify native UI responsiveness or the full 100k-row dataset exit gate. Later
+checks recorded in `AGENTS.md` cover kept-source paging, restart persistence,
+preview type correction and the typed calculation runtime, including a live
+slider change and its restart restoration. Full resource qualification,
+live corrected-type delivery to the model, calc provenance/typed-field interaction
+and mixed-DPR remain outstanding.
 
 Verification for the Phase 3 opener (2026-10-04, manifest **1.20.0**):
 107 main QtTests, 15 blocks, 23 visual and 11 answer checks passed; 156 Python

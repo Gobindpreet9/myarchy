@@ -1,4 +1,5 @@
 import QtQuick
+import "AiState.js" as AiState
 import "SatinGlass.js" as Satin
 
 // A declarative schematic: percentage-grid primitives with selectable parts.
@@ -17,6 +18,27 @@ Column {
     required property color background
     required property color accent
     signal partSelected(int partIndex)
+    // The host's "Ask about this" gate (latest finished answer, idle service).
+    // Closed, there is no Ask control and `?` does nothing.
+    property bool canFocus: false
+    // The person wants to ask about part `index` (user-initiated).
+    signal focusRequested(int index, string label, string detail)
+    // Descriptors align with block.parts; null = not a labelled, selectable node.
+    readonly property var askParts: root.canFocus ? AiState.askParts(root.block) : []
+    // The part with keyboard focus, else the selected one, is who "Ask" is about.
+    property int focusedPart: -1
+    readonly property int askTarget: {
+        var candidates = [root.focusedPart, root.selectedPart];
+        for (var i = 0; i < candidates.length; ++i) {
+            var at = candidates[i];
+            if (at >= 0 && at < root.askParts.length && root.askParts[at]) return at;
+        }
+        return -1;
+    }
+    function askAbout(index) {
+        var part = root.canFocus && index >= 0 && index < root.askParts.length ? root.askParts[index] : null;
+        if (part) root.focusRequested(part.index, part.label, part.detail);
+    }
 
     // Qt model roles wrap nested arrays; normalize to plain values in one
     // function-call binding (the AiChart pattern that works across the Loader).
@@ -83,6 +105,20 @@ Column {
         readonly property real pad: 6
         readonly property real innerW: Math.max(0, width - pad * 2)
         readonly property real innerH: Math.max(0, height - pad * 2)
+
+        AiAskButton {
+            objectName: "aiDiagramAsk"
+            z: 10
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: Satin.space.base
+            visible: root.askTarget >= 0
+            subject: root.askTarget >= 0 ? root.askParts[root.askTarget].label : ""
+            foreground: root.foreground
+            surface: root.background
+            accent: root.accent
+            onClicked: root.askAbout(root.askTarget)
+        }
 
         Repeater {
             model: root.sceneParts
@@ -250,6 +286,18 @@ Column {
 
                 focus: partHost.interactive
                 activeFocusOnTab: partHost.interactive
+                onActiveFocusChanged: {
+                    if (partHost.activeFocus) root.focusedPart = partHost.index;
+                    else if (root.focusedPart === partHost.index) root.focusedPart = -1;
+                }
+                Keys.onPressed: function(event) {
+                    if (event.key === Qt.Key_Question || event.text === "?") {
+                        if (root.canFocus && partHost.index < root.askParts.length && root.askParts[partHost.index]) {
+                            root.askAbout(partHost.index);
+                            event.accepted = true;
+                        }
+                    }
+                }
                 Keys.onSpacePressed: root.select(partHost.index)
                 Keys.onReturnPressed: root.select(partHost.index)
                 Accessible.role: partHost.interactive ? Accessible.Button : Accessible.Graphic

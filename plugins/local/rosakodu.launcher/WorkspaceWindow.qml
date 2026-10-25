@@ -38,6 +38,8 @@ FloatingWindow {
     onContentMinimumHeightChanged: ensureFits()
 
     readonly property string workspaceTitle: {
+        if (workspace.service && typeof workspace.service.workspaceDisplayTitle !== "undefined")
+            return String(workspace.service.workspaceDisplayTitle || "")
         var latest = workspace.service ? workspace.service.latest : null
         return latest ? AiState.answerTitle(latest) : "New workspace"
     }
@@ -62,6 +64,7 @@ FloatingWindow {
 
         Text {
             id: titleText
+            objectName: "aiWorkspaceWindowTitle"
             Layout.fillWidth: true
             text: workspace.workspaceTitle
             textFormat: Text.PlainText
@@ -75,29 +78,35 @@ FloatingWindow {
 
         AiComposer {
             id: composer
+            objectName: "aiWorkspaceWindowComposer"
+            enabled: !workspace.service || typeof workspace.service.workspaceTransitionPending === "undefined"
+                || !workspace.service.workspaceTransitionPending
             Layout.fillWidth: true
             Layout.preferredHeight: composer.implicitHeight
             showBackButton: false
             prompt: workspace.service ? workspace.service.draft : ""
             busy: workspace.service ? workspace.service.busy : false
             stopping: workspace.service ? workspace.service.stopping : false
-            loading: workspace.service ? workspace.service.loadingLatest : false
+            loading: !!workspace.service && (workspace.service.loadingLatest
+                || (typeof workspace.service.workspaceActionPending !== "undefined" && workspace.service.workspaceActionPending))
             attachmentBlocked: !!workspace.service && typeof workspace.service.attachmentBlocked !== "undefined"
                 && workspace.service.attachmentBlocked
             hasConversation: workspace.service ? workspace.service.turns.length > 0 : false
+            focusLabel: workspace.service && typeof workspace.service.focusLabel === "string" ? workspace.service.focusLabel : ""
             foreground: workspace.foreground
             background: workspace.background
             accent: workspace.accent
             onEdited: function(text) { if (workspace.service) workspace.service.draft = text }
             onSubmitted: { if (workspace.service) workspace.service.submit(workspace.service.draft) }
             onStopRequested: { if (workspace.service) workspace.service.stop() }
+            onFocusCleared: { if (workspace.service && typeof workspace.service.clearFocus === "function") workspace.service.clearFocus() }
         }
 
         AiPane {
             id: pane
             Layout.fillWidth: true
             Layout.fillHeight: true
-            visible: workspace.service && (workspace.service.turns.length > 0 || !!workspace.service.attachment || workspace.service.loadingLatest)
+            visible: AiLayout.paneVisible(true, workspace.service)
             allowExpand: false
             allowOpenWindow: false
             service: workspace.service
@@ -105,6 +114,7 @@ FloatingWindow {
             background: workspace.background
             accent: workspace.accent
             onFillPrompt: function(text) { if (workspace.service) workspace.service.draft = text }
+            onComposerFocusRequested: composer.focusPrompt()
         }
     }
 }
