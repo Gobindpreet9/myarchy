@@ -121,6 +121,29 @@ class OpenUiCommandTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(worker.task)
             self.assertEqual(worker.context_bytes, 19)
 
+    async def test_opencode_is_allowed_in_openui_mode_with_its_own_profile(self):
+        called, events = [], []
+        worker = broker.Broker(events.append)
+
+        async def run(*args, **kwargs):
+            called.append((args, kwargs))
+
+        with patch.object(broker, "attachment_snapshot") as attachment, \
+             patch.object(broker, "load_source") as source, \
+             patch.object(catalog, "openui_instructions", return_value="PROFILE") as prompt, \
+             patch.object(worker, "run", run):
+            await worker.command({"op": "submit", "turnId": 8, "agent": "opencode",
+                                  "prompt": "Next", "responseMode": "openui"})
+            if worker.task:
+                await worker.task
+            attachment.assert_not_called()
+            source.assert_not_called()
+            prompt.assert_called_once_with("opencode")
+        self.assertEqual(len(called), 1)
+        self.assertEqual(events, [])
+        self.assertEqual(worker.agent, "opencode")
+        self.assertEqual(worker.response_mode, "openui")
+
     async def test_profile_is_pinned_until_new_and_resume_hint_is_not_imported(self):
         calls, events = [], []
         worker = broker.Broker(events.append)

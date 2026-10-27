@@ -367,18 +367,23 @@ CODEX_INSTRUCTIONS = (_INSTRUCTIONS_HEAD + _CALC_EXAMPLE_JSON + _INSTRUCTIONS_BO
                       + compact_signature(caps=True) + "\n" + _INSTRUCTIONS_RULES)
 HERMES_INSTRUCTIONS = (_INSTRUCTIONS_HEAD + _CALC_EXAMPLE_JSON + _INSTRUCTIONS_BODY.rstrip(" ") + "\n"
                        + compact_signature() + "\n" + _INSTRUCTIONS_RULES)
+# OpenCode has no structural output schema flag either, so it gets the same
+# compact signature as Hermes. The catalogue still travels in each request.
+OPENCODE_INSTRUCTIONS = HERMES_INSTRUCTIONS
 
 
 def system_instructions(agent=None) -> str:
-    """The system prompt for one provider agent: 'codex', 'hermes', anything else gets the full text."""
+    """The system prompt for one provider agent: 'codex', 'hermes', 'opencode', anything else gets the full text."""
     if agent == "codex":
         return CODEX_INSTRUCTIONS
     if agent == "hermes":
         return HERMES_INSTRUCTIONS
+    if agent == "opencode":
+        return OPENCODE_INSTRUCTIONS
     return SYSTEM_INSTRUCTIONS
 
 
-def openui_instructions():
+def openui_instructions(agent=None):
     """Read only the fixed installed native-library prompt, then scope it to code.
 
     The core's generic output-only directives describe a DSL program, not our
@@ -417,7 +422,8 @@ def openui_instructions():
         "\nEND CODE-STRING-ONLY NATIVE LIBRARY REFERENCE\n"
         "FINAL RESPONSE CONTRACT (overrides generic output-only directions in the reference): "
         "Return exactly ONE JSON object with exactly answer, blocks and suggestions, matching the "
-        "supplied output schema. Never return a raw DSL program or a Markdown fence. Escape the "
+        + ("bounded answer shape above. " if agent == "opencode" else "supplied output schema. ") +
+        "Never return a raw DSL program or a Markdown fence. Escape the "
         "complete DSL as a JSON string in blocks[].code; at most one openui block. Use answer for "
         "brief orientation. Keep the existing strict native calc block for unit-aware, provenance-"
         "bearing or validated numeric calculations. Generic OpenUI arithmetic is illustrative only; "
@@ -425,7 +431,7 @@ def openui_instructions():
         "Never claim live data, verified facts, external actions or saved edits without evidence. "
         "No new provider tools are available."
     )
-    text = CODEX_INSTRUCTIONS + scope + component + closing
+    text = (OPENCODE_INSTRUCTIONS if agent == "opencode" else CODEX_INSTRUCTIONS) + scope + component + closing
     if len(text.encode("utf-8")) > OPENUI_INSTRUCTIONS_LIMIT:
         raise ValueError(OPENUI_PROMPT_ERROR)
     return text

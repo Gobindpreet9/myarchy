@@ -52,6 +52,7 @@ SPEC.loader.exec_module(catalog)
 FULL_BUDGET = 26000      # was 23,100; unknown agents only
 CODEX_BUDGET = 13000     # was 12,000; prose + caps table; structure comes from --output-schema
 HERMES_BUDGET = 15000    # was 14,000; prose + full compact signature; no structural schema
+OPENCODE_BUDGET = 15000  # same compact signature; the catalogue travels in the request
 CODEX_OUTPUT_SCHEMA_BUDGET = 13500  # the compact ai-answer.schema.json Codex receives; was 11,225 B
 GUIDE_LINE_BUDGET = 140  # one BLOCK_GUIDE use/not-for line
 
@@ -348,6 +349,7 @@ class PromptVariantTests(unittest.TestCase):
     def test_agent_selection(self):
         self.assertIs(catalog.system_instructions("codex"), catalog.CODEX_INSTRUCTIONS)
         self.assertIs(catalog.system_instructions("hermes"), catalog.HERMES_INSTRUCTIONS)
+        self.assertIs(catalog.system_instructions("opencode"), catalog.OPENCODE_INSTRUCTIONS)
         for other in (None, "", "claude", "CODEX", "codex ", [], {}, 7):
             self.assertIs(catalog.system_instructions(other), catalog.SYSTEM_INSTRUCTIONS)
         self.assertIs(catalog.system_instructions(), catalog.SYSTEM_INSTRUCTIONS)
@@ -355,7 +357,8 @@ class PromptVariantTests(unittest.TestCase):
     def test_every_variant_keeps_the_prose_rules_and_the_calc_example(self):
         example = json.dumps(catalog.CALC_EXAMPLE, ensure_ascii=False, separators=(",", ":"))
         for name, text in (("full", catalog.SYSTEM_INSTRUCTIONS), ("codex", catalog.CODEX_INSTRUCTIONS),
-                           ("hermes", catalog.HERMES_INSTRUCTIONS)):
+                           ("hermes", catalog.HERMES_INSTRUCTIONS),
+                           ("opencode", catalog.OPENCODE_INSTRUCTIONS)):
             with self.subTest(variant=name):
                 for phrase in self.PINNED:
                     self.assertIn(phrase, text)
@@ -368,21 +371,23 @@ class PromptVariantTests(unittest.TestCase):
     def test_only_the_full_text_carries_the_schema_dump(self):
         dump = json.dumps(catalog.ANSWER_SCHEMA, ensure_ascii=False, separators=(",", ":"))
         self.assertIn(dump, catalog.SYSTEM_INSTRUCTIONS)
-        for text in (catalog.CODEX_INSTRUCTIONS, catalog.HERMES_INSTRUCTIONS):
+        for text in (catalog.CODEX_INSTRUCTIONS, catalog.HERMES_INSTRUCTIONS, catalog.OPENCODE_INSTRUCTIONS):
             self.assertNotIn('"additionalProperties"', text)
             self.assertNotIn("$schema", text)
             self.assertNotIn("The authoritative bounded schema", text)
         self.assertIn(catalog.compact_signature(), catalog.HERMES_INSTRUCTIONS)
+        self.assertIn(catalog.compact_signature(), catalog.OPENCODE_INSTRUCTIONS)
         self.assertIn(catalog.compact_signature(caps=True), catalog.CODEX_INSTRUCTIONS)
         # The field list is the full text's duplicate of the structure; the variants replace it.
-        for text in (catalog.CODEX_INSTRUCTIONS, catalog.HERMES_INSTRUCTIONS):
+        for text in (catalog.CODEX_INSTRUCTIONS, catalog.HERMES_INSTRUCTIONS, catalog.OPENCODE_INSTRUCTIONS):
             self.assertNotIn("Use text/richtext/code (type,title,text)", text)
 
     def test_the_variants_do_not_drift_from_the_full_prose(self):
         # Same head, example and rules text in every variant: a rule is stated once.
         pieces = (catalog._INSTRUCTIONS_HEAD, catalog._CALC_EXAMPLE_JSON, catalog._INSTRUCTIONS_BODY.rstrip(" "),
                   catalog._INSTRUCTIONS_RULES)
-        for text in (catalog.SYSTEM_INSTRUCTIONS, catalog.CODEX_INSTRUCTIONS, catalog.HERMES_INSTRUCTIONS):
+        for text in (catalog.SYSTEM_INSTRUCTIONS, catalog.CODEX_INSTRUCTIONS, catalog.HERMES_INSTRUCTIONS,
+                     catalog.OPENCODE_INSTRUCTIONS):
             position = 0
             for piece in pieces:
                 found = text.find(piece, position)
@@ -397,7 +402,7 @@ class TaskFirstGuidanceTests(unittest.TestCase):
     """
 
     def variants(self):
-        for name in ("codex", "hermes", "full"):
+        for name in ("codex", "hermes", "opencode", "full"):
             yield name, " ".join(catalog.system_instructions(name).split())
 
     def test_practical_task_intents_lead_before_media_or_serialization(self):
@@ -474,11 +479,13 @@ class BudgetTests(unittest.TestCase):
     def test_budgets(self):
         sizes = {"full": size(catalog.SYSTEM_INSTRUCTIONS), "codex": size(catalog.CODEX_INSTRUCTIONS),
                  "hermes": size(catalog.HERMES_INSTRUCTIONS),
+                 "opencode": size(catalog.OPENCODE_INSTRUCTIONS),
                  "codexOutputSchema": size(json.dumps(catalog.ANSWER_SCHEMA, ensure_ascii=False, separators=(",", ":")))}
         self.assertLessEqual(sizes["codexOutputSchema"], CODEX_OUTPUT_SCHEMA_BUDGET, sizes)
         self.assertLessEqual(sizes["full"], FULL_BUDGET, sizes)
         self.assertLessEqual(sizes["codex"], CODEX_BUDGET, sizes)
         self.assertLessEqual(sizes["hermes"], HERMES_BUDGET, sizes)
+        self.assertLessEqual(sizes["opencode"], OPENCODE_BUDGET, sizes)
         self.assertLess(sizes["codex"], sizes["hermes"])
         self.assertLess(sizes["hermes"], sizes["full"])
 
@@ -498,6 +505,7 @@ class BudgetTests(unittest.TestCase):
         lines.append("  %-30s %6d  (budget %d)" % ("TOTAL full", size(catalog.SYSTEM_INSTRUCTIONS), FULL_BUDGET))
         lines.append("  %-30s %6d  (budget %d)" % ("TOTAL codex", size(catalog.CODEX_INSTRUCTIONS), CODEX_BUDGET))
         lines.append("  %-30s %6d  (budget %d)" % ("TOTAL hermes", size(catalog.HERMES_INSTRUCTIONS), HERMES_BUDGET))
+        lines.append("  %-30s %6d  (budget %d)" % ("TOTAL opencode", size(catalog.OPENCODE_INSTRUCTIONS), OPENCODE_BUDGET))
         lines.append("  %-30s %6d  (budget %d)" % ("output schema (compact)", size(dump), CODEX_OUTPUT_SCHEMA_BUDGET))
         full_lines = catalog.compact_signature().split("\n")[3:]
         caps_lines = catalog.compact_signature(caps=True).split("\n")[3:]
@@ -527,7 +535,8 @@ class BudgetTests(unittest.TestCase):
                 self.assertEqual(line, line.encode("ascii").decode("ascii"))
                 self.assertNotIn("\n", line)
                 self.assertIn("one %s" % ("timeline" if kind == "timeline" else kind + " block"), line)
-                for text in (catalog.SYSTEM_INSTRUCTIONS, catalog.CODEX_INSTRUCTIONS, catalog.HERMES_INSTRUCTIONS):
+                for text in (catalog.SYSTEM_INSTRUCTIONS, catalog.CODEX_INSTRUCTIONS, catalog.HERMES_INSTRUCTIONS,
+                     catalog.OPENCODE_INSTRUCTIONS):
                     self.assertIn("- " + line + "\n", text)
 
 

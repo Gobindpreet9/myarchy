@@ -191,6 +191,15 @@ ShellRoot {
                 } else if (check.phase === 16 && !service.loadingLatest && runtime.ready && !runtime.busy
                         && service.workspaceId === check.original) {
                     check.require(runtime.canonicalState.$n === 11, "Pre-freeze acknowledgement was saved to the original before switching")
+                    check.require(service.newConversation(), "Fresh OpenCode proof conversation")
+                    service.defaultAgent = "opencode"
+                    service.draft = "OpenCode tool"
+                    check.require(service.submit(service.draft), "OpenCode submit accepted")
+                    check.phase = 17
+                } else if (check.phase === 17 && !service.busy && service.latest
+                        && service.latest.status === "done") {
+                    check.require(service.agent === "opencode", "OpenCode is the selected agent")
+                    check.require(service.responseMode === "openui", "New OpenCode conversation selects OpenUI")
                     check.finish(0, "")
                 }
             } catch (error) { check.finish(1, String(error)) }

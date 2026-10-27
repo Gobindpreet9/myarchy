@@ -63,8 +63,9 @@ Item {
     property bool resumeOnOpen: false
     property string draft: ""
     property string attachment: ""
-    // A new Codex conversation may author OpenUI; restored legacy workspaces
-    // keep the native profile so an existing provider session never changes it.
+    // A new Codex or OpenCode conversation may author OpenUI; restored legacy
+    // workspaces keep the native profile so an existing provider session never
+    // changes it.
     property bool openUiEnabled: true
     property string responseMode: ""
     property var openUiTarget: null
@@ -1247,7 +1248,7 @@ Item {
     function sendTurn(text, linked) {
         if (openUiPending || workspaceTransitionPending) return false
         var chosen = AiState.resolveAgent(agent, defaultAgent)
-        var mode = responseMode || (openUiEnabled && chosen === "codex" ? "openui" : "native")
+        var mode = responseMode || (openUiEnabled && (chosen === "codex" || chosen === "opencode") ? "openui" : "native")
         var selectedTool = openUiExplicitSelection && openUiTarget && openUiTarget.workspaceId === workspaceId
             && openUiIdentity(openUiTarget.turnId, openUiTarget.blockIndex) === openUiTarget.key
             ? OpenUi.target(turns, openUiTarget.turnId, openUiTarget.blockIndex) : null
@@ -1305,8 +1306,8 @@ Item {
             if (Object.keys(carried).length) setUiState(turn.id, csvViewKey(linkedSourceId), carried)
         }
         if (!AiState.supported(chosen)) {
-            replaceLatest({type: "error", message: chosen ? "The launcher supports Codex and Hermes for now. Your default is " + chosen + "."
-                : "Choose an AI agent in Omarchy first: omarchy default agent codex"})
+            replaceLatest({type: "error", message: chosen ? "The launcher supports Codex, OpenCode and Hermes for now. Your default is " + chosen + "."
+                : "Choose an AI agent in Omarchy first: omarchy default agent opencode"})
             return false
         }
         busy = true

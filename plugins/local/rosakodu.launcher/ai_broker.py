@@ -38,7 +38,8 @@ MAX_CONTEXT = 64 * 1024  # plain-text attachment cap and reader slack; NOT the c
 # many realistic follow-ups (~45-50 KB each with a source, ~30 KB without).
 CONVERSATION_BUDGET = 192 * 1024
 RESPONSE_MODE_ERROR = "Response mode must be native or openui."
-OPENUI_PROVIDER_ERROR = "Native OpenUI answers currently require Codex. Choose Codex or use native answers."
+OPENUI_PROVIDER_ERROR = ("Native OpenUI answers currently require Codex or OpenCode. "
+                         "Choose one of them or use native answers.")
 RESPONSE_MODE_CHANGE_ERROR = "Start a new conversation before changing response mode."
 OPENUI_CONTEXT_ERROR = "OpenUI context is invalid."
 OPENUI_CONTEXT_LIMIT = 48 * 1024  # whole compact UTF-8 {code,state}, including JSON escaping
@@ -131,6 +132,9 @@ METRICS_MAX_LINES = 200
 METRICS_READ_LIMIT = 256 * 1024
 USAGE_KEYS = {"input_tokens": "inputTokens", "cached_input_tokens": "cachedInputTokens",
               "output_tokens": "outputTokens", "reasoning_output_tokens": "reasoningTokens"}
+# `opencode run --format json` step_finish tokens use short names and a cache object.
+OPENCODE_USAGE_KEYS = {"input": "inputTokens", "output": "outputTokens",
+                       "reasoning": "reasoningTokens"}
 # A submitted form rides inside the workspace context as `form`; it is appended
 # as its own fixed-sentence section of the same dynamic envelope (never the
 # system prompt) and charged once with the rest of the request.
@@ -1099,13 +1103,25 @@ def private_write(path, data):
 
 def clean_env():
     # Keep transport credentials for Hermes; remove execution/config injection.
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("CODEX_", "HERMES_", "PYTHON"))}
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("CODEX_", "HERMES_", "OPENCODE_", "PYTHON"))}
     for key in ("LD_PRELOAD", "LD_LIBRARY_PATH", "BASH_ENV", "ENV", "NODE_OPTIONS"):
         env.pop(key, None)
     return env
 
 
 AUDITED_CODEX_VERSION = "0.160.0"
+AUDITED_OPENCODE_VERSION = "2.1.4"
+# One audited OpenCode model. The provider variant keeps the answer JSON stable
+# enough for the launcher's strict validator; the catalogue still travels in the
+# request (like Hermes), not in OpenCode's merged user configuration.
+OPENCODE_MODEL = "opencode-go/deepseek-v4.1-flash#high"
+OPENCODE_AGENT = "launcher"
+OPENCODE_FALLBACK_PATHS = ("/usr/lib/opencode-desktop/opencode-cli", "/usr/bin/opencode")
+OPENCODE_POLICY = (
+    "You are the answer engine for a desktop launcher. You have no tools and must not "
+    "request one. Reply directly with the single JSON answer object described in the "
+    "user message. Never run commands, read or write files, browse, or call MCP tools."
+)
 
 
 PROBE_TIMEOUT = 5
@@ -1151,6 +1167,46 @@ async def discover_codex(probe_timeout=None):
     if not usable:
         raise ValueError("Install Codex using mise before using launcher AI.")
     raise ValueError("Codex answer-only mode requires audited version " + AUDITED_CODEX_VERSION + ".")
+
+
+async def discover_opencode(probe_timeout=None):
+    """Locate and audit the installed OpenCode CLI without running its service.
+
+    `--version` is a global flag, so probing never boots the desktop service.
+    A hung or unlaunchable candidate only skips itself.
+    """
+    limit = PROBE_TIMEOUT if probe_timeout is None else probe_timeout
+
+    async def probe(*argv):
+        parent = os.getpid()
+        proc = await asyncio.create_subprocess_exec(*argv, stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.DEVNULL, start_new_session=True,
+                    preexec_fn=lambda: parent_death(parent))
+        try:
+            output, _ = await asyncio.wait_for(proc.communicate(), limit)
+            return output if proc.returncode == 0 else b""
+        finally:
+            await terminate(proc)
+
+    home = Path.home()
+    candidates = [shutil.which("opencode"), str(home / ".local/bin/opencode"),
+                  *OPENCODE_FALLBACK_PATHS]
+    usable = False
+    for candidate in dict.fromkeys(c for c in candidates if c):
+        if not Path(candidate).is_absolute() or not os.access(candidate, os.X_OK):
+            continue
+        usable = True
+        try:
+            output = await probe(candidate, "--version")
+        except (OSError, asyncio.TimeoutError):
+            continue
+        text = output.decode(errors="replace").strip()
+        if text in (AUDITED_OPENCODE_VERSION, "opencode v" + AUDITED_OPENCODE_VERSION):
+            return candidate
+    if not usable:
+        raise ValueError("Install OpenCode before using launcher AI.")
+    raise ValueError("OpenCode answer-only mode requires audited version " + AUDITED_OPENCODE_VERSION + ".")
+
 
 
 def refresh_codex_auth(isolated, user_home=None):
@@ -1272,6 +1328,97 @@ def codex_output_schema(isolated, response_mode):
     return path
 
 
+def opencode_user_db(user_home=None, data_home=None):
+    """The user's real OpenCode database, which holds its OAuth credentials.
+
+    Sharing the file (never copying it) avoids duplicating refresh tokens: a
+    copied database can rotate a token behind the user's back. Launcher-created
+    sessions therefore appear in OpenCode's own session list.
+    """
+    home = Path(user_home or Path.home())
+    data = Path(data_home) if data_home else Path(
+        os.environ.get("XDG_DATA_HOME") or (home / ".local/share"))
+    return data / "opencode" / "opencode.db"
+
+
+def prepare_opencode(base, user_home=None, data_home=None):
+    isolated = private_dir(Path(tempfile.mkdtemp(prefix="opencode-", dir=base)))
+    try:
+        write_owner(isolated)
+        return _prepare_opencode_home(isolated, Path(user_home or Path.home()), data_home)
+    except BaseException:
+        remove_private_home(isolated, base, missing_ok=True)
+        raise
+
+
+def _prepare_opencode_home(isolated, user_home, data_home=None):
+    """Build an isolated HOME/XDG tree that still uses the real auth database.
+
+    The global config is ours alone (an empty XDG_CONFIG_HOME plus this file),
+    the private cwd contains no project config and OpenCode's own data, cache
+    and state do not mix with the user's. Only `OPENCODE_DB` points at the
+    shared credential store.
+    """
+    cwd = private_dir(isolated / "empty")
+    config_home = private_dir(isolated / "config")
+    config_dir = private_dir(config_home / "opencode")
+    home = private_dir(isolated / "home")
+    data = private_dir(isolated / "data")
+    cache = private_dir(isolated / "cache")
+    state = private_dir(isolated / "state")
+    db = opencode_user_db(user_home, data_home)
+    try:
+        info = os.stat(db)
+    except OSError:
+        raise ValueError("Sign in to OpenCode before using launcher AI.") from None
+    if not stat.S_ISREG(info.st_mode) or info.st_size > 1024 * 1024 * 1024:
+        raise ValueError("Sign in to OpenCode before using launcher AI.")
+    config = {
+        "$schema": "https://opencode.ai/config.json",
+        "update": "disable",
+        "share": "disabled",
+        "model": OPENCODE_MODEL,
+        "agents": {
+            OPENCODE_AGENT: {
+                "description": "Answer-only launcher tool",
+                "mode": "primary",
+                "system": OPENCODE_POLICY,
+                # Deny every tool/permission; the answer catalogue is in the
+                # request, not here, so config changes cannot silently widen it.
+                "permissions": [{"action": "*", "resource": "*", "effect": "deny"}],
+            },
+        },
+    }
+    private_write(config_dir / "opencode.json",
+                  json.dumps(config, ensure_ascii=False, indent=2).encode("utf-8"))
+    env = clean_env()
+    env.update({
+        "HOME": str(home),
+        "XDG_CONFIG_HOME": str(config_home),
+        "XDG_CONFIG_DIRS": str(config_home),
+        "XDG_DATA_HOME": str(data),
+        "XDG_CACHE_HOME": str(cache),
+        "XDG_STATE_HOME": str(state),
+        "OPENCODE_DB": str(db),
+    })
+    env["PATH"] = env.get("PATH") or os.defpath
+    return isolated, cwd, env
+
+
+def opencode_command(executable, prepared, session):
+    """Headless answer-only invocation; the prompt is written to stdin.
+
+    Stdin keeps the prompt (which contains the whole answer catalogue) out of
+    process argv, so it cannot be read from a process listing.
+    """
+    _, cwd, env = prepared
+    argv = [executable, "run", "--standalone", "--format", "json",
+            "--agent", OPENCODE_AGENT, "--model", OPENCODE_MODEL]
+    if session:
+        argv.extend(["--session", session])
+    return argv, cwd, env
+
+
 # --- Isolated Codex home lifecycle -----------------------------------------
 #
 # Every broker process builds one private home (auth copy, model catalog and
@@ -1284,7 +1431,7 @@ def codex_output_schema(isolated, response_mode):
 #     reference it;
 #   * `--reap-homes` is an explicit, dry-run-first CLI that removes old homes
 #     no saved workspace references. Nothing calls it automatically.
-HOME_NAME = re.compile(r"codex-[a-z0-9_]{8}")
+HOME_NAME = re.compile(r"(?:codex|opencode)-[a-z0-9_]{8}")
 REAP_MIN_AGE = 24 * 3600
 REAP_LIMIT = 200
 REAP_SCAN_ENTRIES = 20000
@@ -1305,7 +1452,7 @@ def remove_private_home(home, base, missing_ok=False):
     """Delete one launcher-created home directly under `base`, nothing else."""
     home, base = Path(home), Path(base)
     if home.parent != base or not HOME_NAME.fullmatch(home.name):
-        raise ValueError("Not a launcher Codex home.")
+        raise ValueError("Not a launcher provider home.")
     try:
         info = os.lstat(home)
     except FileNotFoundError:
@@ -1313,7 +1460,7 @@ def remove_private_home(home, base, missing_ok=False):
             return
         raise
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
-        raise ValueError("Unsafe launcher Codex home.")
+        raise ValueError("Unsafe launcher provider home.")
     shutil.rmtree(home)
 
 
@@ -1568,6 +1715,8 @@ class ProviderStream:
         # and final agent messages seen. Codex 0.160.0 sends no partial updates.
         self.partial_updates = 0
         self.final_text = 0
+        # OpenCode `text` parts are complete blocks; join them with a blank line.
+        self.text_parts = []
 
     def consume(self, event):
         kind = event.get("type")
@@ -1598,6 +1747,53 @@ class ProviderStream:
                                   if type(usage.get(key)) is int and 0 <= usage[key] < 2**40}
             elif kind in ("error", "turn.failed"):
                 raise ValueError("Codex could not complete the answer. Check authentication in the terminal.")
+        elif self.agent == "opencode":
+            # Pinned to `opencode run --format json` v2.1.4. `text` parts are
+            # complete blocks and a plain text answer may end at EOF without a
+            # step_finish. Tool events are rejected, never surfaced.
+            session = event.get("sessionID")
+            if isinstance(session, str):
+                self.session = session
+            if kind == "step_start":
+                pass
+            elif kind == "text":
+                part = event.get("part")
+                text = part.get("text") if type(part) is dict else None
+                if not isinstance(text, str):
+                    raise ValueError("Provider returned an invalid event stream.")
+                if text:
+                    self.text_parts.append(text)
+                    self.raw = "\n\n".join(self.text_parts)
+                    self.final_text += 1
+            elif kind == "reasoning":
+                pass
+            elif kind == "step_finish":
+                part = event.get("part")
+                if type(part) is not dict:
+                    raise ValueError("Provider returned an invalid event stream.")
+                reason = part.get("reason")
+                tokens = part.get("tokens")
+                if isinstance(tokens, dict):
+                    usage = {name: tokens[key] for key, name in OPENCODE_USAGE_KEYS.items()
+                             if type(tokens.get(key)) is int and 0 <= tokens[key] < 2**40}
+                    cache = tokens.get("cache")
+                    if (type(cache) is dict and type(cache.get("read")) is int
+                            and 0 <= cache["read"] < 2**40):
+                        usage["cachedInputTokens"] = cache["read"]
+                    if usage:
+                        self.usage = usage
+                if reason == "stop":
+                    self.complete = True
+                elif reason == "tool-calls":
+                    raise ValueError("Provider attempted a tool in answer-only mode.")
+                elif reason is not None:
+                    raise ValueError("OpenCode could not complete the answer. Check sign-in in the terminal.")
+            elif kind == "tool_use":
+                raise ValueError("Provider attempted a tool in answer-only mode.")
+            elif kind == "error":
+                raise ValueError("OpenCode could not complete the answer. Check sign-in in the terminal.")
+            else:
+                raise ValueError("Provider returned an invalid event stream.")
         else:
             if kind == "system" and event.get("subtype") == "init":
                 self.session = event.get("session_id")
@@ -1710,6 +1906,7 @@ class Broker:
         self.context_bytes = 0
         self.codex = None
         self.codex_profile = "native"
+        self.opencode = None
         self.handed_off = False
         self.base = None
         self.closed = False
@@ -1750,6 +1947,21 @@ class Broker:
         except (OSError, ValueError):
             pass
 
+    def release_opencode_home(self):
+        """Drop this broker's disposable OpenCode home.
+
+        Sessions live in the user's real database, so this tree only holds the
+        private config/cache for one broker lifetime and is always safe to
+        delete once no task is running.
+        """
+        opencode, self.opencode = self.opencode, None
+        if opencode is None or self.base is None:
+            return
+        try:
+            remove_private_home(opencode[0], self.base, missing_ok=True)
+        except (OSError, ValueError):
+            pass
+
     async def command(self, payload):
         timeline = Timeline()  # `received`; adopted by self only once the turn is accepted
         turn = payload.get("turnId")
@@ -1761,6 +1973,7 @@ class Broker:
                 self.emit("stopped", turn)
             if op == "new":
                 self.release_codex_home()
+                self.release_opencode_home()
                 self.agent = self.session = None
                 self.response_mode = self.profile_instructions = None
                 self.context_bytes = 0
@@ -1793,17 +2006,17 @@ class Broker:
             return
         agent = payload.get("agent", "codex")
         prompt = payload.get("prompt")
-        if agent not in ("codex", "hermes") or not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 8000:
-            self.emit("error", turn, message="Choose Codex or Hermes and enter a prompt of at most 8000 characters.")
+        if agent not in ("codex", "hermes", "opencode") or not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 8000:
+            self.emit("error", turn, message="Choose Codex, OpenCode or Hermes and enter a prompt of at most 8000 characters.")
             return
-        if response_mode == "openui" and agent != "codex":
+        if response_mode == "openui" and agent not in ("codex", "opencode"):
             self.emit("error", turn, message=OPENUI_PROVIDER_ERROR)
             return
         if self.response_mode is not None and self.response_mode != response_mode:
             self.emit("error", turn, message=RESPONSE_MODE_CHANGE_ERROR)
             return
         try:
-            profile_instructions = (self.profile_instructions or ai_catalog.openui_instructions()
+            profile_instructions = (self.profile_instructions or ai_catalog.openui_instructions(agent)
                                     if response_mode == "openui" else None)
         except ValueError as exc:
             self.emit("error", turn, message=str(exc))
@@ -1930,6 +2143,12 @@ class Broker:
                 else:
                     argv.append("-")
                 stdin = prompt.encode()
+            elif agent == "opencode":
+                executable = await discover_opencode()
+                if self.opencode is None:
+                    self.opencode = prepare_opencode(self.base)
+                argv, cwd, env = opencode_command(executable, self.opencode, self.session)
+                stdin = prompt.encode()
             else:
                 cwd = private_dir(self.base / "hermes-empty")
                 argv, env = hermes_command(prompt, self.session, cwd)
@@ -1975,6 +2194,10 @@ class Broker:
                         timeline.mark_text(not stream.complete and not stream.final_text)
                         self.emit("delta", turn, text=text)
                 await proc.wait()
+                if agent == "opencode" and proc.returncode == 0 and stream.raw:
+                    # v2.1.4 can end a plain text answer at EOF without a
+                    # step_finish record. Exit 0 plus decoded text is complete.
+                    stream.complete = True
                 if proc.returncode != 0 or not stream.complete or not stream.raw:
                     raise ValueError("Provider could not complete the answer. Check sign-in in the terminal.")
                 result = normalize_response(stream.raw, self.response_mode or "native")
@@ -2064,6 +2287,7 @@ async def main():
     finally:
         await broker.stop()
         broker.release_codex_home()
+        broker.release_opencode_home()
 
 
 if __name__ == "__main__":

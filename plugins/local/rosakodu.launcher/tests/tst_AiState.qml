@@ -265,6 +265,8 @@ TestCase {
     }
     function test_unsupportedDefaultFallsBackToCodexButEmptyDoesNot() {
         compare(AiState.resolveAgent("hermes", "claude"), "hermes")
+        compare(AiState.resolveAgent("opencode", "claude"), "opencode")
+        compare(AiState.resolveAgent("", "opencode"), "opencode")
         compare(AiState.resolveAgent("", "hermes"), "hermes")
         compare(AiState.resolveAgent("", "claude"), "codex")
         compare(AiState.resolveAgent("other", "claude"), "codex")
@@ -274,6 +276,9 @@ TestCase {
         compare(AiState.agentFallbackNote("hermes", "codex"),
                 "This conversation uses Hermes; your default is Codex. Start a new chat to switch.")
         compare(AiState.agentFallbackNote("hermes", "hermes"), "")
+        compare(AiState.agentFallbackNote("opencode", "codex"),
+                "This conversation uses OpenCode; your default is Codex. Start a new chat to switch.")
+        compare(AiState.agentFallbackNote("opencode", "opencode"), "")
         compare(AiState.agentFallbackNote("codex", ""), "")
         compare(AiState.agentFallbackNote("", "claude"), "")
         verify(AiState.agentFallbackNote("codex", "x".repeat(200)).length < 120, "an odd default file cannot blow up the note")
@@ -286,6 +291,7 @@ TestCase {
         compare(AiState.parseDefaultAgent("  Hermes  \n"), "hermes")
         compare(AiState.parseDefaultAgent("hermes\n# switched\n"), "hermes", "only the first line counts, like omarchy-default-agent")
         compare(AiState.parseDefaultAgent("claude"), "claude")
+        compare(AiState.parseDefaultAgent("opencode\n"), "opencode")
         compare(AiState.parseDefaultAgent("\u200b"), "", "an invisible character is not an agent choice")
         compare(AiState.parseDefaultAgent("co dex"), "")
         compare(AiState.parseDefaultAgent("a".repeat(33)), "")
@@ -305,11 +311,20 @@ TestCase {
         verify(!auth.dropAttachment)
         compare(AiState.failureAdvice("Hermes could not complete the answer. Check authentication in the terminal.", "").headline,
                 "Hermes couldn't complete the answer")
+        var opencode = AiState.failureAdvice("OpenCode could not complete the answer. Check sign-in in the terminal.", "")
+        compare(opencode.headline, "OpenCode couldn't complete the answer")
+        compare(opencode.signInAgent, "opencode")
+        verify(!opencode.signInPrimary)
         // Definitive: no Codex sign-in exists at all.
         var never = AiState.failureAdvice("Sign in to Codex before using launcher AI.", "")
         compare(never.headline, "Sign in to Codex")
         compare(never.signInAgent, "codex")
         verify(never.signInPrimary)
+        var neverOpen = AiState.failureAdvice("Sign in to OpenCode before using launcher AI.", "")
+        compare(neverOpen.headline, "Sign in to OpenCode")
+        compare(neverOpen.signInAgent, "opencode")
+        verify(neverOpen.detail.indexOf("opencode auth login") >= 0)
+        verify(!neverOpen.signInPrimary, "OpenCode has no verified fixed sign-in command")
         var gone = AiState.failureAdvice("Attachment is unavailable or is a symbolic link.", "/scratch/u/rents.csv")
         compare(gone.headline, "That file isn't available")
         compare(gone.retryLabel, "Try again without the file")
@@ -331,6 +346,7 @@ TestCase {
         compare(JSON.stringify(AiState.signInCommand("codex")),
                 '["omarchy-launch-terminal","env","-u","CODEX_HOME","codex","login"]')
         compare(AiState.signInCommand("hermes").length, 0)
+        compare(AiState.signInCommand("opencode").length, 0)
         compare(AiState.signInCommand("codex; rm -rf ~").length, 0)
         compare(AiState.signInCommand("").length, 0)
         compare(AiState.failureAdvice("Codex could not complete the answer. Check authentication in the terminal.", "").signInAgent, "codex")

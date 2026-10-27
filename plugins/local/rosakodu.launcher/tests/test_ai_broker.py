@@ -2484,6 +2484,238 @@ class ContextStubFollowupTests(unittest.TestCase):
                 self.assertIn("Unexpected text after submitted " + key, events[-1]["message"])
 
 
+class OpenCodePrepareTests(unittest.TestCase):
+    def fixture(self, root):
+        home = root / "user"
+        data = home / ".local/share"
+        db = data / "opencode/opencode.db"
+        db.parent.mkdir(parents=True)
+        db.write_bytes(b"SQLite format 3\x00fake")
+        base = b.private_dir(root / "state")
+        return home, data, db, base
+
+    def test_prepare_isolates_config_and_shares_only_the_user_database(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, data, db, base = self.fixture(root)
+            with patch.dict(os.environ, {"OPENCODE_CONFIG": "/tmp/hostile.json",
+                                         "OPENCODE_CONFIG_CONTENT": "{}",
+                                         "OPENCODE_DB": "/tmp/hostile.db"}):
+                isolated, cwd, env = b.prepare_opencode(base, home, data)
+            config = json.loads((isolated / "config/opencode/opencode.json").read_text())
+            self.assertEqual(config["model"], b.OPENCODE_MODEL)
+            self.assertEqual(config["agents"][b.OPENCODE_AGENT]["permissions"],
+                             [{"action": "*", "resource": "*", "effect": "deny"}])
+            self.assertEqual(config["agents"][b.OPENCODE_AGENT]["system"], b.OPENCODE_POLICY)
+            self.assertEqual(env["OPENCODE_DB"], str(db))
+            self.assertNotIn("OPENCODE_CONFIG", env)
+            self.assertNotIn("OPENCODE_CONFIG_CONTENT", env)
+            self.assertEqual(env["HOME"], str(isolated / "home"))
+            self.assertEqual(env["XDG_CONFIG_HOME"], str(isolated / "config"))
+            self.assertEqual(env["XDG_DATA_HOME"], str(isolated / "data"))
+            self.assertEqual(env["XDG_CACHE_HOME"], str(isolated / "cache"))
+            self.assertEqual(env["XDG_STATE_HOME"], str(isolated / "state"))
+            self.assertEqual((isolated / "config/opencode/opencode.json").stat().st_mode & 0o777, 0o600)
+            self.assertEqual(cwd, isolated / "empty")
+            self.assertFalse((isolated / "config/opencode/opencode.json").is_symlink())
+            # The shared auth store is referenced, never copied into the home.
+            self.assertFalse((isolated / "opencode.db").exists())
+
+    def test_prepare_refuses_without_a_user_database_and_removes_the_half_built_home(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, data, db, base = self.fixture(root)
+            db.unlink()
+            with self.assertRaisesRegex(ValueError, "Sign in to OpenCode"):
+                b.prepare_opencode(base, home, data)
+            self.assertEqual([entry.name for entry in base.iterdir()], [])
+
+    def test_release_and_new_remove_the_disposable_home(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            home, data, db, base = self.fixture(root)
+            isolated, _, _ = b.prepare_opencode(base, home, data)
+            broker = b.Broker(lambda event: None)
+            broker.base = base
+            broker.opencode = (isolated, isolated, {})
+            broker.release_opencode_home()
+            self.assertFalse(isolated.exists())
+            isolated, _, _ = b.prepare_opencode(base, home, data)
+            broker.opencode = (isolated, isolated, {})
+            asyncio.run(broker.command({"op": "new"}))
+            self.assertIsNone(broker.opencode)
+            self.assertFalse(isolated.exists())
+
+    def test_discovery_accepts_only_the_audited_build_and_skips_a_hung_candidate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            fake = bin_dir / "opencode"
+            fake.write_text("#!/bin/sh\necho 'opencode v2.1.4'\n")
+            fake.chmod(0o755)
+            with patch.object(b.Path, "home", return_value=root), \
+                 patch.object(b, "OPENCODE_FALLBACK_PATHS", ()), \
+                 patch.dict(os.environ, {"PATH": str(bin_dir)}):
+                self.assertEqual(asyncio.run(b.discover_opencode()), str(fake))
+            fake.write_text("#!/bin/sh\necho 'opencode v9.9.9'\n")
+            with patch.object(b.Path, "home", return_value=root), \
+                 patch.object(b, "OPENCODE_FALLBACK_PATHS", ()), \
+                 patch.dict(os.environ, {"PATH": str(bin_dir)}):
+                with self.assertRaisesRegex(ValueError, "audited version 2.1.4"):
+                    asyncio.run(b.discover_opencode())
+            fake.write_text("#!/bin/sh\nexec sleep 30\n")
+            fallback = root / ".local/bin/opencode"
+            fallback.parent.mkdir(parents=True)
+            fallback.write_text("#!/bin/sh\necho 'opencode v2.1.4'\n")
+            fallback.chmod(0o755)
+            with patch.object(b.Path, "home", return_value=root), \
+                 patch.object(b, "OPENCODE_FALLBACK_PATHS", ()), \
+                 patch.dict(os.environ, {"PATH": str(bin_dir)}):
+                started = time.monotonic()
+                self.assertEqual(asyncio.run(b.discover_opencode(probe_timeout=0.4)), str(fallback))
+                self.assertLess(time.monotonic() - started, 5)
+            fallback.unlink()
+            with patch.object(b.Path, "home", return_value=root), \
+                 patch.object(b, "OPENCODE_FALLBACK_PATHS", ()), \
+                 patch.dict(os.environ, {"PATH": "/nonexistent"}):
+                with self.assertRaisesRegex(ValueError, "Install OpenCode"):
+                    asyncio.run(b.discover_opencode())
+
+
+class OpenCodeProviderTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.base = b.private_dir(self.root / "state")
+        self.events = []
+        self.fake = self.root / "opencode"
+        self.capture = self.root / "runs.jsonl"
+        self.broker = b.Broker(self.events.append, timeout=10)
+        self.broker.base = self.base
+        self.broker.opencode = (self.base, self.root, dict(os.environ))
+        for target in (patch.object(b, "prepare_opencode",
+                                    return_value=(self.base, self.root, dict(os.environ))),):
+            target.start()
+            self.addCleanup(target.stop)
+
+    async def locate(self):
+        return str(self.fake)
+
+    def script(self, events):
+        self.fake.write_text(
+            "#!" + sys.executable + "\n"
+            "import sys,json\n"
+            "data=sys.stdin.read()\n"
+            "with open(%r,'a',encoding='utf-8') as f:\n"
+            "    f.write(json.dumps({'argv':sys.argv[1:],'prompt':data})+'\\n')\n"
+            "events=%r\n"
+            "for event in events: print(json.dumps(event),flush=True)\n"
+            % (str(self.capture), events))
+        self.fake.chmod(0o755)
+
+    def run_record(self, index):
+        return [json.loads(line) for line in self.capture.read_text().splitlines()][index]
+
+    async def submit(self, **payload):
+        await self.broker.command({"op": "submit", "turnId": 1, "agent": "opencode",
+                                   "prompt": "hello", **payload})
+        if self.broker.task:
+            await self.broker.task
+
+    async def test_run_uses_headless_argv_stdin_and_accepts_eof_completion(self):
+        self.script([{"type": "step_start", "sessionID": "ses_open1"},
+                     {"type": "text", "sessionID": "ses_open1", "part": {"text": ANSWER}}])
+        with patch.object(b, "discover_opencode", self.locate):
+            await self.submit()
+        self.assertEqual(self.events[-1]["type"], "done")
+        self.assertEqual(self.events[-1]["agent"], "opencode")
+        self.assertEqual(self.events[-1]["sessionId"], "ses_open1")
+        record = self.run_record(0)
+        self.assertEqual(record["argv"][:2], ["run", "--standalone"])
+        self.assertIn("--format", record["argv"])
+        self.assertIn("json", record["argv"])
+        self.assertEqual(record["argv"][record["argv"].index("--agent") + 1], "launcher")
+        self.assertEqual(record["argv"][record["argv"].index("--model") + 1], b.OPENCODE_MODEL)
+        self.assertNotIn("--session", record["argv"])
+        self.assertNotIn("hello", " ".join(record["argv"]))
+        self.assertIn(b.instructions_for("opencode"), record["prompt"])
+        self.assertTrue(record["prompt"].endswith("\nUser request (literal text):\nhello"))
+
+    async def test_second_turn_resumes_the_opencode_session(self):
+        self.script([{"type": "step_start", "sessionID": "ses_open1"},
+                     {"type": "text", "sessionID": "ses_open1", "part": {"text": ANSWER}}])
+        with patch.object(b, "discover_opencode", self.locate):
+            await self.submit()
+            await self.submit()
+        second = self.run_record(1)["argv"]
+        self.assertEqual(second[second.index("--session") + 1], "ses_open1")
+        self.assertEqual(self.events[-1]["type"], "done")
+
+    async def test_opencode_can_use_the_openui_profile(self):
+        self.script([{"type": "step_start", "sessionID": "ses_open2"},
+                     {"type": "text", "sessionID": "ses_open2", "part": {"text": ANSWER}}])
+        with patch.object(b, "discover_opencode", self.locate):
+            await self.submit(responseMode="openui")
+        self.assertEqual(self.events[-1]["type"], "done")
+        self.assertEqual(self.broker.response_mode, "openui")
+        prompt = self.run_record(0)["prompt"]
+        self.assertIn("OPTIONAL NATIVE OPENUI PROFILE", prompt)
+        self.assertIn("bounded answer shape above", prompt)
+
+    async def test_tool_and_provider_errors_are_static(self):
+        cases = [
+            ([{"type": "step_start", "sessionID": "ses_open3"},
+              {"type": "tool_use", "sessionID": "ses_open3",
+               "part": {"type": "tool", "tool": "shell", "state": {"status": "completed"}}}],
+             "attempted a tool"),
+            ([{"type": "error", "sessionID": "ses_open3",
+               "error": {"type": "provider.no-route",
+                         "message": "Model unavailable: /private/secret token"}}],
+             "OpenCode could not complete"),
+        ]
+        with patch.object(b, "discover_opencode", self.locate):
+            for events, message in cases:
+                with self.subTest(message=message):
+                    self.capture.unlink(missing_ok=True)
+                    self.script(events)
+                    await self.submit()
+                    self.assertEqual(self.events[-1]["type"], "error")
+                    self.assertIn(message, self.events[-1]["message"])
+                    self.assertNotIn("secret", self.events[-1]["message"])
+                    self.assertNotIn("done", [event["type"] for event in self.events])
+        self.assertIsNone(self.broker.session, "a rejected stream never adopts a session")
+
+    async def test_empty_exit_zero_is_a_static_failure_not_an_empty_answer(self):
+        self.script([])
+        with patch.object(b, "discover_opencode", self.locate):
+            await self.submit()
+        self.assertEqual(self.events[-1]["type"], "error")
+        self.assertIn("could not complete", self.events[-1]["message"])
+
+    async def test_stream_records_opencode_usage_and_rejects_unknown_events(self):
+        stream = b.ProviderStream("opencode")
+        stream.consume({"type": "step_start", "sessionID": "ses_usage"})
+        stream.consume({"type": "text", "sessionID": "ses_usage", "part": {"text": "first"}})
+        stream.consume({"type": "text", "sessionID": "ses_usage", "part": {"text": "second"}})
+        stream.consume({"type": "step_finish", "sessionID": "ses_usage", "part": {
+            "reason": "stop", "tokens": {"input": 11, "output": 7, "reasoning": 3,
+                                         "cache": {"read": 5, "write": 2}}}})
+        self.assertEqual(stream.raw, "first\n\nsecond")
+        self.assertTrue(stream.complete)
+        self.assertEqual(stream.session, "ses_usage")
+        self.assertEqual(stream.usage, {"inputTokens": 11, "outputTokens": 7,
+                                        "reasoningTokens": 3, "cachedInputTokens": 5})
+        with self.assertRaisesRegex(ValueError, "invalid event stream"):
+            b.ProviderStream("opencode").consume({"type": "future.event"})
+        with self.assertRaisesRegex(ValueError, "invalid event stream"):
+            b.ProviderStream("opencode").consume({"type": "text", "part": {"text": 7}})
+        with self.assertRaisesRegex(ValueError, "session ID"):
+            b.ProviderStream("opencode").consume(
+                {"type": "step_start", "sessionID": "bad session id"})
+
+
 class WorkerTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.directory = tempfile.TemporaryDirectory()

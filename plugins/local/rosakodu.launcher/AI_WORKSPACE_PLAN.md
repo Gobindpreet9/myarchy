@@ -276,7 +276,7 @@ The defining interaction is **an answer that becomes an object you can work with
 
 ### Planning assumptions
 
-- Retain Quickshell/QML, Python orchestration/storage, theme tokens, and Codex/Hermes adapters. Refactor lifecycle and data flow first; use Rust for a demonstrated backend bottleneck if the criteria in section 4.10 are met.
+- Retain Quickshell/QML, Python orchestration/storage, theme tokens, and Codex/OpenCode/Hermes adapters. Refactor lifecycle and data flow first; use Rust for a demonstrated backend bottleneck if the criteria in section 4.10 are met.
 - Preserve instant app/file launching as the entry experience.
 - Support keyboard and pointer equally; a touch-first redesign is not assumed.
 - Local, restart-persistent workspaces are the default persistence direction.
@@ -658,7 +658,7 @@ the older native capabilities were reconciled with the installed tree on October
 | State context | Bounded latest-answer/calc and form/choice/focus context; OpenUI follow-ups additionally carry latest completed tool code/state (48 KiB total / 12 KiB state); depth is separate | Revision-aware artifact patches, not merely new answers |
 | Suggestions | Contextual chips fill the composer without sending; selected-part targets accompany the next explicit question | Broader contextual action model |
 | Lifecycle | Lazy restore implemented (metadata-only boot; hydrate once on real AI entry); one lazy `--serve` store worker per session (one connection across a burst, strictly ordered results, idle/EOF exit); coalesced dirty-field saves (workspace row on every save, full content only when a content change raised `dirtyContent`) | Remaining lifecycle refactors |
-| Agents | New Codex chats default to OpenUI; legacy workspaces/Hermes retain native generation; Codex hosted lookup and Hermes's no-tool boundary are unchanged | Explicit adapter capability negotiation |
+| Agents | New Codex/OpenCode chats default to OpenUI; legacy workspaces and Hermes retain native generation; Codex hosted lookup and the OpenCode/Hermes no-tool boundary are unchanged | Explicit adapter capability negotiation |
 | OpenUI runtime | One lazy retained service controller, credential-free guardian/Node core evaluator, native QML presentation; explicit historical-tool selection | Live lifecycle/resource qualification; broader arbitrary-code artifacts remain separate |
 | Window | Connected Peek/Explore panel and detached normal workspace window | Remaining lifecycle, focus and multi-scale qualification |
 

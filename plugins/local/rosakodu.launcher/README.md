@@ -183,8 +183,13 @@ appears in the composer, and you can still edit the next draft. Use the direct
 **←** button to return to app search without clearing the conversation.
 
 The launcher watches Omarchy's default agent
-(`~/.config/omarchy/defaults/agent`). Current adapters target **Codex** and
-**Hermes**. An existing chat stays pinned to its agent. The direct **New chat**
+(`~/.config/omarchy/defaults/agent`). Current adapters target **Codex**,
+**OpenCode** and **Hermes**. An existing chat stays pinned to its agent. New
+Codex and OpenCode conversations author the native OpenUI tool profile; Hermes
+and restored legacy conversations use native answers. OpenCode answers run
+headlessly with the pinned `opencode-go/deepseek-v4.1-flash#high` model and an
+answer-only policy: no shell, file, browser or MCP tools, and no changes to your
+OpenCode configuration. The direct **New chat**
 action in the answer toolbar clears the visible conversation, draft, attachment
 and checklist state; the finished conversation stays saved and searchable, and
 the next submission uses the current default. **Earlier answers**
@@ -564,7 +569,9 @@ as stopped.
 
 **More → Continue in terminal** resumes the same agent session when the adapter
 provides a valid handoff, not a desktop-app deep link. Codex continuation uses
-the launcher's private Codex home when its adapter supports it. Use the standard
+the launcher's private Codex home when its adapter supports it. OpenCode has no
+launcher handoff button yet, but its sessions are stored in your OpenCode
+database and can be resumed with `opencode --session <id>`. Use the standard
 terminal agent workflow for full agent permissions outside the launcher;
 continuation itself does not promise a permission upgrade.
 

@@ -1,12 +1,42 @@
 # rosakodu.launcher agent notes
 
-Native OpenUI integration (2026-10-25, **working tree, not live-installed**):
+OpenCode provider (2026-10-26, **working tree; live install pending**):
+`ai_broker.py` discovers audited OpenCode **2.1.4** and runs
+`opencode run --standalone --format json --agent launcher --model
+opencode-go/deepseek-v4.1-flash#high`, with the prompt on stdin (never process
+argv) and `--session` on follow-ups. `prepare_opencode` builds a private
+HOME/XDG tree whose OpenCode config contains a deny-all answer-only agent; it
+shares ONLY the user's real `~/.local/share/opencode/opencode.db` via
+`OPENCODE_DB`, so OAuth refresh tokens are never duplicated. Launcher sessions
+therefore appear in the user's OpenCode session list. The answer catalogue
+travels in each request (Hermes-style compact signature); the config carries
+only the short answer-only policy. The v2.1.4 JSON stream is pinned:
+`step_start`/`text`/`reasoning`/`step_finish` are accepted, `text` parts are
+complete blocks joined by a blank line, tool/unknown events fail closed, and
+provider errors map to a static message. A text-only answer may end at EOF
+without `step_finish`, so exit 0 plus decoded text is accepted. OpenCode homes
+are disposable and use the same reaper pattern as Codex homes.
+`AiState.supported`, `agentName`, failure advice and `AiService` include
+`opencode`; new Codex and OpenCode chats default to `responseMode: "openui"`,
+while Hermes and restored legacy conversations stay native. No OpenCode handoff
+button yet; its sessions can be resumed with `opencode --session <id>`.
+Offline verification: **660 Python tests (2 skipped)**, 1,799 main QtTests,
+AiOpenUiServiceCheck's new OpenCode-mode phase and AiServiceCheck green, audit
+passing. Direct integration probes (real OpenCode, scratch homes, real auth DB)
+produced one validated native answer in 18.4 s and one validated native OpenUI
+tool in 9.1 s. Those are single samples, not provider-quality or reliability
+benchmarks. Live install, restart, default-agent switch and live OpenUI prompts
+were still pending at this checkpoint.
+
+Native OpenUI integration (2026-10-25; live-installed checkpoint `5788367`, then
+this working tree):
 new Codex conversations automatically select `responseMode: "openui"`; restored
 legacy workspaces default to `native`, and Hermes stays native. The existing
 composer, turns, artifacts and SQLite store retain ownership. Manifest/release
-stays **1.22.0**. First private-branch checkpoint `cf483da` was pushed; that is
-not deployment of the current native integration. Do not install into the live
-plugin, restart the shell or touch user workspaces without separate approval.
+stays **1.22.0**. Checkpoint `5788367` is the live-installed native integration
+(byte-identical plugin subtree); this OpenCode working tree is not installed
+yet. Do not install into the live plugin, restart the shell or touch user
+workspaces without separate approval.
 
 `AiService.qml` owns ONE retained `AiOpenUiRuntime.qml`, not one per answer
 Loader. Native `AiOpenUiSurface`/`View`/`Node`/`Svg` adapters present a bounded

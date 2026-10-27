@@ -18,7 +18,7 @@ var prefix = "ai: ";
 function draft(query) { return mode(query) ? String(query).slice(3).replace(/^\s/, "") : ""; }
 function prompt(query) { return mode(query) ? String(query).slice(3).trim() : ""; }
 function agentName(agent) {
-    return ({codex: "Codex", hermes: "Hermes"})[agent] || String(agent || "No default agent");
+    return ({codex: "Codex", hermes: "Hermes", opencode: "OpenCode"})[agent] || String(agent || "No default agent");
 }
 // Saved workspaces are launcher-searchable; title matches rank above
 // summary-only matches, and the active workspace is excluded.
@@ -74,7 +74,7 @@ function answerTitle(turn) {
     if (text.length > 96) text = text.slice(0, 93).trim() + "…";
     return text ? text[0].toUpperCase() + text.slice(1) : "Answer";
 }
-function supported(agent) { return agent === "codex" || agent === "hermes"; }
+function supported(agent) { return agent === "codex" || agent === "hermes" || agent === "opencode"; }
 // Provider the launcher will actually use. An explicit but unsupported default
 // (for example claude) falls back to Codex so AI keeps working; an empty
 // default stays unresolved so the person is told to choose an agent first.
@@ -106,14 +106,18 @@ function parseDefaultAgent(text) {
 // an unfamiliar failure is never hidden behind friendly copy.
 function failureAdvice(message, attachment) {
     var text = String(message || "");
-    // Definitive: the launcher found no Codex sign-in at all.
-    if (/^Sign in to Codex before using launcher AI\.?$/.test(text))
-        return {headline: "Sign in to Codex",
-                detail: "The launcher has no Codex sign-in yet. Sign in from a terminal, then try again.",
-                retryLabel: "Try again", dropAttachment: false, signInAgent: "codex", signInPrimary: true};
+    // Definitive: the launcher found no provider sign-in at all.
+    var signIn = /^Sign in to (Codex|OpenCode) before using launcher AI\.?$/.exec(text);
+    if (signIn)
+        return {headline: "Sign in to " + signIn[1],
+                detail: signIn[1] === "Codex"
+                    ? "The launcher has no Codex sign-in yet. Sign in from a terminal, then try again."
+                    : "The launcher has no OpenCode sign-in yet. Run `opencode auth login` in a terminal, then try again.",
+                retryLabel: "Try again", dropAttachment: false,
+                signInAgent: signIn[1].toLowerCase(), signInPrimary: signIn[1] === "Codex"};
     // The broker raises this for ANY provider error event (sign-in, usage
     // limit, network), so it is offered as a likely cause, never asserted.
-    var auth = /^(Codex|Hermes) could not complete the answer\. Check authentication in the terminal\.?$/.exec(text);
+    var auth = /^(Codex|OpenCode|Hermes) could not complete the answer\. Check (?:authentication|sign-in) in the terminal\.?$/.exec(text);
     if (auth)
         return {headline: auth[1] + " couldn't complete the answer",
                 detail: auth[1] === "Codex"
@@ -129,8 +133,10 @@ function failureAdvice(message, attachment) {
 }
 // Fixed-argv terminal command that signs a provider in. Codex only: the
 // launcher copies ~/.codex/auth.json, so a normal `codex login` is enough.
-// No model, workspace or user text is ever interpolated. CODEX_HOME is unset
-// so the login lands in ~/.codex, the only place the launcher copies from.
+// Hermes and OpenCode have no verified fixed sign-in command yet and get
+// guidance only. No model, workspace or user text is ever interpolated.
+// CODEX_HOME is unset so the login lands in ~/.codex, the only place the
+// launcher copies from.
 function signInCommand(agent) {
     return agent === "codex" ? ["omarchy-launch-terminal", "env", "-u", "CODEX_HOME", "codex", "login"] : [];
 }
