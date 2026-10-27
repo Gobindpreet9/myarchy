@@ -219,7 +219,7 @@ function updateTurn(turn, event) {
 // The dynamic-vocabulary keys (`act:`, `compare:`, `plan:`) also go when the
 // block now at that index has a different TYPE, judged only when the optional
 // `blocks` list is passed. Returns the SAME object when nothing was removed.
-var VOCAB_STATE_TYPES = {act: ["actions", "compare"], compare: ["compare"], plan: ["timeline"]};
+var VOCAB_STATE_TYPES = {act: ["actions", "compare"], compare: ["compare"], plan: ["timeline"], openui: ["openui"]};
 function pruneUiState(state, blockCount, blocks) {
     if (!state || typeof state !== "object" || Array.isArray(state)) return state;
     var count = typeof blockCount === "number" && isFinite(blockCount) ? Math.max(0, Math.floor(blockCount)) : 0;
@@ -230,7 +230,7 @@ function pruneUiState(state, blockCount, blocks) {
         var match = /^(?:check|slider|calc|form|table|diagram|step|predict|image):(\d+)$/.exec(key)
             || /^gallery:(\d+):\d+$/.exec(key);
         if (match && parseInt(match[1], 10) >= count) { removed = true; continue; }
-        var vocab = /^(act|compare|plan):(\d+)$/.exec(key);
+        var vocab = /^(act|compare|plan|openui):(\d+)$/.exec(key);
         if (vocab) {
             var at = parseInt(vocab[2], 10), held = null;
             if (typed && at < count) { try { held = blocks[at]; } catch (e) { held = null; } }
@@ -1044,11 +1044,17 @@ function focusWire(raw) {
     } catch (e) { return null; }
 }
 
-function textAnswer(turn, uiState) {
+function textAnswer(turn, uiState, openUiText) {
     if (!turn) return "";
     var parts = [turn.answer || ""];
     if (turn.explanation) parts.push("Explanation: " + turn.explanation);
     (turn.blocks || []).forEach(function(block, blockIndex) {
+        if (block && block.type === "openui") {
+            if (block.title) parts.push(block.title);
+            parts.push(openUiText && openUiText[blockIndex]
+                || "Open this interactive tool to include its current labels, inputs and results.");
+            return;
+        }
         if (block && block.type === "form") {
             // A form: its title, the current answers, "Sent" and the note.
             var formState = uiState && typeof uiState === "object" ? uiState["form:" + blockIndex] : null;

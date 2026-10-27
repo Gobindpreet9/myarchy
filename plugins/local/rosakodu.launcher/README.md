@@ -8,22 +8,42 @@ global keybinding.
 
 ---
 
-## OpenUI integration work
+## Native OpenUI integration — development status
 
-A separate working prototype lives in `~/Work/launcher-openui/launcher/`.
-It is an internal development harness, **not a separate product or a step users
-should need to launch**. Intelligent UI belongs inside the native launcher's
-existing AI pane, composer and saved workspaces. A renderer-only adapter now
-exists, but native embedding is not delivered yet. Native conversations remain
-untouched. See `AI_WORKSPACE_PLAN.md` §3.4 for the comparison, host compatibility
-checks and remaining integration gates.
+The `feat/launcher-openui-native` working tree now integrates OpenUI into the
+existing native AI pane, composer, turns and SQLite workspaces. **This code is
+not installed on the live desktop**; the manifest/release remains **1.22.0**.
+No shell restart or user-workspace mutation was performed for this integration.
+The separate `~/Work/launcher-openui/launcher/` browser prototype is historical
+development evidence, not a product or a step users need to launch.
 
-Development checkpoints are on the owner's `feat/launcher-openui-native`
-branch. Run `python3 -B tests/run_offline.py` from this plugin directory for
-the Python, QML and isolated Quickshell checks. Every check uses a fresh private
-scratch HOME/XDG tree under `/tmp/opencode`; no provider or live workspace is
-needed. Logs are retained there for diagnosis. These offscreen checks do not
-qualify live Wayland or mixed-DPR behaviour.
+New Codex conversations automatically use `responseMode: "openui"`, allowing
+one model-authored OpenUI tool alongside the existing answer blocks. Restored
+legacy workspaces and Hermes keep native-block generation. One retained
+`AiService` runtime evaluates the restricted DSL outside Qt; native QML adapters
+render its inert layout/control/SVG tree. There is **no WebEngine/browser runtime
+and no DSL evaluation in Qt**. Only one tool is selected at a time; expand
+**Earlier answers** and choose **Use this tool** to activate a historical tool.
+Acknowledged inputs persist under `uiStates[turnId]["openui:<blockIndex>"]` and
+duplicate as opaque state, using the existing save path. OpenUI follow-ups carry
+bounded code/state context (48 KiB total, including at most 12 KiB of state), not
+a reconstructed transcript or an in-place artifact patch.
+
+The credential-free Python guardian runs permission-limited **Node >=24**
+(26 on this machine), with a 96 MiB old-space cap and an external 3-second
+per-request watchdog. Bounded JSONL IPC, restricted AST/actions and semantic
+SHA-256 event handles (authored action AST plus input binding/options/range)
+reject stale queued action/input retargets. Native typed
+`calc` validation remains separate; generic OpenUI math does not inherit its
+units/provenance guarantees.
+
+Build source, lockfile and MIT notices are under `openui/`. From this plugin
+directory, `python3 -B tests/build_openui.py --check` rebuilds/tests in scratch
+using `npm ci --ignore-scripts` and checks byte-identical assets; only explicit
+`--write` replaces generated assets. `python3 -B tests/run_offline.py` runs
+Python, QML and isolated Quickshell checks with fresh private HOME/XDG trees
+under `/tmp/opencode`; no provider or live workspace is needed. See Tests and
+`AI_WORKSPACE_PLAN.md` §3.4 for evidence and pending live/resource qualification.
 
 ## ✨ Features
 
@@ -124,6 +144,7 @@ qualify live Wayland or mixed-DPR behaviour.
 | **Sort a comparison table** | `Tab` to a column header and press `Return` / `Space`, or click it: ascending → descending → authored order |
 | **Filter comparison-table rows** | `Tab` to the filter field (tables of four or more rows) and type; the row count updates live |
 | **Ask about one part of an answer** | on the latest finished answer, hover a table row, gallery tile, step, selected diagram node or chart point and choose **Ask**; by keyboard, `Tab` to the table rows (one stop, `Up`/`Down` choose a row), a step, a gallery cell, a diagram node or the chart and press `?`. The composer shows **About: ...** and the next question carries that part; `Esc` (or **x**) removes it before anything is sent |
+| **Use an earlier OpenUI tool** | expand **Earlier answers**, then choose **Use this tool**; one selected runtime is shared across the conversation (development tree only) |
 | **New AI chat** | **New chat** in the answer toolbar |
 | **Expand / collapse the AI workspace** | **Expand** / **Collapse** in the answer toolbar |
 | **Reopen a saved workspace** | search for its title or summary; the **Workspace · date** row opens it |
@@ -264,10 +285,12 @@ The AI broker process is demand-started and retired when idle: while the
 launcher (in AI mode) or the detached workspace window is visible, or a job is
 running or stopping, it stays warm; once every AI surface is hidden and no
 work has run for 30 seconds, a repeating one-second timer retires the broker
-process. The persisted provider session travels with every submit, so the next
-question cold-starts a fresh broker that resumes the same conversation — an
-idle shutdown sacrifices no continuity. If the provider has discarded that
-session, the broker clears it and retries once from a fresh session instead of
+process. Native-block submits carry the persisted provider session, so the next
+question cold-starts a fresh broker that resumes the same conversation. OpenUI
+keeps warm provider sessions, but a cold broker does not adopt an untagged saved
+session: its bounded tool code/state snapshot supplies follow-up context instead,
+not the complete conversation. If the provider has discarded a native session,
+the broker clears it and retries once from a fresh session instead of
 hard-failing the follow-up: provider-side continuity is best-effort,
 availability is not, and any run that adopted a persisted session hint is
 covered — depth explanations included. Provider processes load `ai_broker.py`
@@ -292,8 +315,9 @@ The private Codex catalog selects regular Responses instead of Responses Lite
 to allow hosted lookup. Media resolution is handled by the app, not additional
 model tools.
 
-Answers automatically use validated, flat native blocks: text, limited
-rich text, code, tables, interactive checklists, metrics, progress, contextual
+The native-block profile (Hermes and restored legacy conversations) uses
+validated, flat blocks; these also remain available in the Codex OpenUI profile:
+text, limited rich text, code, tables, interactive checklists, metrics, progress, contextual
 images, market history, generic charts, compact clickable sources, and learning
 blocks — **steps** (a stepper with previous/next, a current-stage overview and
 a saved position), **check** (one or more correct options with per-option
@@ -343,8 +367,10 @@ it removes the entry, a prediction counts once committed, the first stepper
 stage is not "stepped through", a sorted table counts while a column is
 actively sorted (cycling back to the authored order removes the entry), a
 non-empty filter counts, and unknown state keys are ignored.
-There is no full HTML renderer, embedded browser or script execution. Checklist
-selections are retained by the service within the same session.
+There is no full HTML renderer, embedded browser or generated JavaScript
+execution. OpenUI's restricted declarative DSL runs only in its isolated worker,
+not the shell; the block controls described above keep their existing engines.
+Checklist selections are retained by the service within the same session.
 **Copy** copies plain text, including chart point data, image credits and source
 URLs; **More → Show as text** switches to that text representation. A
 structured block that fails validation is dropped on its own (the answer text
@@ -612,8 +638,31 @@ synchronously. It is not a model-granted file tool; users still attach via `f:`
 
 ## 🧪 Tests
 
-Custom UI visual checks (2026-10-23): `tests/AiTaskVisualCheck.qml` renders actual
-native answer components with illustrative decision/plan/form fixtures at
+Native OpenUI verification (2026-10-26, development tree only): **21 worker
+tests**, **649 Python tests (2 skipped)**, **1,799 main QtTests**, 29 blocks /
+23 visual / 12 answer / 6 task-visual, and all ten isolated checks in
+`tests/run_offline.py` (including `AiOpenUiRuntimeCheck` and
+`AiOpenUiServiceCheck`) are green. `python3 -B tests/build_openui.py --check`
+rebuilt the worker in scratch and found the generated assets byte-identical;
+`scripts/audit.py` passed. Coverage includes bounded IPC, timeouts/cleanup,
+queued semantic retarget rejection (including distinct authored conditional Copy
+actions), saved-state restore/opaque duplication, historical-tool selection and
+follow-up context. This is scratch/offscreen verification, not live deployment.
+
+One real Codex garden tool was generated through the production broker in
+27.58 seconds; its exact DSL replayed through native `AiService`/`AiAnswer` at
+420/980px. Both showed 72 initial positions with SVG dots, then 48 after changing
+length to 3.6 m and spacing to 30 cm. Inspected screenshots:
+`/tmp/opencode/native-openui-visual-qsgbpwid/opaque-garden-420.png` and
+`opaque-garden-edited-980.png` in the same directory. The QQuickItem alpha grabs
+were composited over the actual `#202124` Window background. This is one
+provider sample plus offscreen replay, **not a reliability benchmark, live
+desktop deployment, Wayland/mixed-DPR pass or live-shell resource measurement**.
+The raw provider sample remains scratch-only, outside the repository. Current
+resource remeasurement and live qualification remain pending.
+
+Historical custom UI visual checks (2026-10-23): `tests/AiTaskVisualCheck.qml`
+renders actual native answer components with illustrative decision/plan/form fixtures at
 420/760/980px, restored plan progress and light/Crimson Gold palette variants.
 The screenshots `/tmp/opencode/ai-task-*.png` were read and inspected. Inspection
 and restoration emit no provider action. These are offscreen checks, not a live
@@ -689,7 +738,9 @@ never point an automated store check at saved user workspaces.
 Run from the plugin directory:
 
 ```bash
-cd ~/.config/omarchy/plugins/rosakodu.launcher
+python3 -B tests/build_openui.py --check  # scratch rebuild; --write explicitly updates assets
+python3 -B tests/run_offline.py          # preferred: every suite gets private scratch HOME/XDG
+# Individual commands below also require private scratch HOME/XDG, never live state:
 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunner -input tests
 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunner -input tests/AiBlocksCheck.qml
 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software /usr/lib/qt6/bin/qmltestrunner -input tests/AiVisualCheck.qml
@@ -1139,8 +1190,9 @@ elevation, keylines, state sizing and motion. `LauncherPanel` uses `Color.bar.te
 card keyline and specular top edge also apply in every mode; there is no
 hardcoded production palette.
 
-`AiLayout.js` replaces `AiTheme.js` and contains only `composerHeight` and
-`answerHeight`. The AI composer uses `Satin.radius.field` and `Satin.type.search`,
+`AiLayout.js` replaces `AiTheme.js` and provides measured sizing and task-first
+answer composition, including OpenUI tools. The AI composer uses
+`Satin.radius.field` and `Satin.type.search`,
 with field alpha `0.075` and an accent focus border matching the existing app
 field. The editorial answer composition, integrated controls and explicit tool
 safety boundaries remain unchanged.

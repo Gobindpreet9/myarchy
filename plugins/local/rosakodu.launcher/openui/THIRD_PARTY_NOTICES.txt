@@ -1,0 +1,28 @@
+Native launcher OpenUI adapter
+
+Open Intelligent UI: https://github.com/thesysdev/open-intelligent-ui
+Copyright (c) 2026 Thesys Inc. MIT License.
+Adapted component schemas and copied function source are under vendor/src/lib.
+Source revision, adaptations and reference hashes: upstream-inputs.json.
+Complete license: licenses/open-intelligent-ui-MIT.txt.
+
+OpenUI: https://github.com/thesysdev/openui
+Copyright (c) 2011-2024 Thesys Inc. MIT License.
+The native bundle contains @openuidev/lang-core 1.0.0 with telemetry removed.
+Complete license: licenses/lang-core-MIT.txt.
+
+Zod: https://github.com/colinhacks/zod
+Copyright (c) 2025 Colin McDonnell. MIT License.
+Bundled runtime schema dependency. Complete license: licenses/zod-MIT.txt.
+
+esbuild: https://github.com/evanw/esbuild
+Copyright (c) 2020 Evan Wallace. MIT License.
+Build-only dependency. Complete license: licenses/esbuild-MIT.txt.
+
+ci-info: https://github.com/watson/ci-info
+Copyright (c) 2016 Thomas Watson Steen. MIT License.
+Upstream build/reference dependency; excluded from the native runtime.
+Complete license: licenses/ci-info-MIT.txt.
+
+Keep this notice, the complete license files, and any bundler-preserved legal
+comments with redistributions. React and Next.js are not native runtime inputs.

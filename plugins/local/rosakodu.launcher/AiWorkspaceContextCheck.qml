@@ -95,7 +95,7 @@ ShellRoot {
             var component = Qt.createComponent(Qt.resolvedUrl("AiService.qml"))
             check(component.status === Component.Ready, component.errorString())
             var scratchRoot = state + "/workspace-context-check"
-            service = component.createObject(root, {storeEnabled: false, brokerScript: stubScript,
+            service = component.createObject(root, {storeEnabled: false, openUiEnabled: false, brokerScript: stubScript,
                 storeScript: stubScript, stateRoot: scratchRoot})
             check(service && service.storeEnabled === false && service.brokerScript === stubScript
                 && service.storeScript === stubScript && service.stateRoot === scratchRoot,

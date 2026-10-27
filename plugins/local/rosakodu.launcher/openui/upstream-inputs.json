@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/thesysdev/open-intelligent-ui",
+  "revision": "03213439358bf3408ad61a46ec9e3230c5572e48",
+  "core": {"package": "@openuidev/lang-core", "version": "1.0.0", "sourceSha256": "9e77ef9228181586002cb0b0d8a409a9e08dfa663099009b87a38d55b94bce4a"},
+  "adaptations": [
+    "Component props/descriptions extracted without React render functions; the native reference artifacts below must remain byte-identical to the original full-component build.",
+    "reactive(schema) retains the upstream markReactive-and-return semantics with no React import.",
+    "Pure function definitions are copied; the bundler redirects their framework-independent defineFunction import to lang-core.",
+    "Pinned core telemetry regions are replaced by no-op functions; no evaluator/parser semantics are changed.",
+    "Only Set, Reset and CopyToClipboard actions are exposed; the generated prompt's host-action guidance is replaced accordingly."
+  ],
+  "referenceArtifacts": {
+    "native-schema.json": "b8310fa84f1280d939b9bb62e7d8e990e0981c9f190c08d6594ae8c85a91fc4f",
+    "native-reactive.json": "6b8cff99b36535dbbd1ac08bf0f86b98a922e620a79ab03dfb69ba47e117efb3",
+    "native-system-prompt.txt": "7b083dabad3acf68250fa60357923cc306f372221cf01714667bdd929236f688",
+    "native-examples.json": "07285363c70e015d9578917a8d9a51ecd616c1f9e9ef8b9cbab6867c9c6afca6"
+  }
+}

@@ -17,6 +17,7 @@ Column {
     property bool showText: false
     property var checkedState: ({})
     property var uiState: null
+    property var openUiService: null
     property bool calcCanDuplicate: true
     property string calcDuplicateHint: ""
     property string mediaRoot: ""
@@ -25,7 +26,8 @@ Column {
     // question, is the loudest thing on the card.
     property bool failed: false
     property int turnIndex: 0
-    readonly property string summary: showText ? AiState.textAnswer(turn, uiState) : String(turn && turn.answer || "")
+    readonly property string summary: showText ? openUiService && typeof openUiService.textAnswerFor === "function"
+        ? openUiService.textAnswerFor(turn) : AiState.textAnswer(turn, uiState) : String(turn && turn.answer || "")
     readonly property var answerBlocks: {
         // ListModel payloads expose Qt sequences, not native JavaScript arrays.
         var result = [], blocks = turn && turn.blocks;
@@ -41,7 +43,8 @@ Column {
         form: qsTr("MAKE IT YOURS"), timeline: qsTr("YOUR PLAN"), diagram: qsTr("EXPLORE THE IDEA"),
         gallery: qsTr("VISUAL EXPLORER"), chart: qsTr("EXPLORE THE DATA"), market: qsTr("MARKET OVERVIEW"),
         steps: qsTr("STEP BY STEP"), check: qsTr("CHECK YOUR UNDERSTANDING"), predict: qsTr("MAKE A PREDICTION"),
-        table: qsTr("EXPLORE THE DETAILS"), actions: qsTr("CHOOSE YOUR NEXT STEP")})[root.composition.kind] || ""
+        table: qsTr("EXPLORE THE DETAILS"), actions: qsTr("CHOOSE YOUR NEXT STEP"),
+        openui: qsTr("YOUR INTERACTIVE TOOL")})[root.composition.kind] || ""
     property bool explanationExpanded: false
     readonly property string disclosureKey: String(root.turn && root.turn.id) + "\n" + String(root.turn && root.turn.prompt)
     onDisclosureKeyChanged: root.explanationExpanded = false
@@ -261,6 +264,8 @@ Column {
                 width: taskLoader.width
                 composition: root.composition
                 turnIndex: root.turnIndex
+                turnId: root.turn ? root.turn.id : -1
+                openUiService: root.openUiService
                 suppressedTitle: root.displayTitle
                 checkedState: root.checkedState
                 uiState: root.uiState
@@ -296,6 +301,8 @@ Column {
         blockIndices: root.remainingBlockIndices
         checkedState: root.checkedState
         uiState: root.uiState
+        turnId: root.turn ? root.turn.id : -1
+        openUiService: root.openUiService
         calcCanDuplicate: root.calcCanDuplicate
         calcDuplicateHint: root.calcDuplicateHint
         mediaRoot: root.mediaRoot

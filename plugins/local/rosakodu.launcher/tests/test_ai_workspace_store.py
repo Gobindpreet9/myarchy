@@ -694,6 +694,21 @@ class WorkspaceStoreTests(unittest.TestCase):
         self.assertEqual((Path(self.root) / "sources" / ("src-" + "c" * 16) / "data.csv").read_text(), "value\n7\n")
         self.assertEqual(len(list((Path(self.root) / "sources").iterdir())), 1)
 
+    def test_duplicate_preserves_openui_user_state_as_opaque_data(self):
+        original = self.reusable_fixture()
+        opaque = {"$payload": {"artifactId": original["artifacts"][0]["id"],
+                               "activeArtifactId": "loose-artifact",
+                               "checklist:loose-artifact": [None, False, 0, "literal"]}}
+        self.save(workspace_payload(self.source_id, interaction={"uiStates": {"42": {"openui:1": opaque}},
+                                                               "responseMode": "openui"}))
+        original = self.cli("load", {"workspaceId": self.source_id})[1]
+        self.assertEqual(self.duplicate()[0], 0)
+        copied = self.cli("load", {"workspaceId": self.destination_id})[1]
+        self.assertEqual(copied["interaction"]["uiStates"]["42"]["openui:1"], opaque)
+        self.assertEqual(copied["interaction"]["responseMode"], "openui")
+        self.assertNotEqual(copied["interaction"]["turn:42"]["artifactId"], opaque["$payload"]["artifactId"])
+        self.assertEqual(self.cli("load", {"workspaceId": self.source_id})[1], original)
+
     def test_duplicate_rejects_collisions_missing_source_and_invalid_ids(self):
         self.reusable_fixture()
         for destination in ("", "ws-1", "ws-" + "A" * 16, "ws-" + "a" * 15,

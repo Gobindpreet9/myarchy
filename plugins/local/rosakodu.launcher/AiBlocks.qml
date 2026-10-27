@@ -24,6 +24,8 @@ Column {
     property var checkedState: null
     // Per-turn interaction state (step index, check selections, predictions).
     property var uiState: null
+    property var openUiService: null
+    property int turnId: -1
     property bool calcCanDuplicate: true
     property string calcDuplicateHint: ""
     signal checkChanged(int blockIndex, int itemIndex, bool checked)
@@ -146,11 +148,25 @@ Column {
                     case "actions": return actionsComponent;
                     case "compare": return compareComponent;
                     case "timeline": return timelineComponent;
+                    case "openui": return openUiComponent;
                     case "sources": return sourcesComponent;
                     default: return null;
                     }
                 }
             }
+        }
+    }
+
+    Component {
+        id: openUiComponent
+        AiOpenUiSurface {
+            readonly property var host: parent
+            service: root.openUiService
+            turnId: root.turnId
+            blockIndex: host.blockIndex
+            foreground: root.foreground
+            background: root.background
+            accent: root.accent
         }
     }
 

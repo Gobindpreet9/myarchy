@@ -4,6 +4,7 @@ import Quickshell.Io
 import "AiState.js" as AiState
 import "CsvPage.js" as CsvPage
 import "AiCalcEdit.js" as CalcEdit
+import "AiOpenUiState.js" as OpenUi
 
 // The host retains this service independently of the on-demand launcher panel.
 Item {
@@ -62,6 +63,76 @@ Item {
     property bool resumeOnOpen: false
     property string draft: ""
     property string attachment: ""
+    // A new Codex conversation may author OpenUI; restored legacy workspaces
+    // keep the native profile so an existing provider session never changes it.
+    property bool openUiEnabled: true
+    property string responseMode: ""
+    property var openUiTarget: null
+    property bool openUiExplicitSelection: false
+    property var deferredOpenUiRestore: null
+    property bool acceptingOpenUiAcknowledgement: false
+    readonly property bool openUiPending: openUiRuntime.busy
+    readonly property AiOpenUiRuntime openUiRuntime: AiOpenUiRuntime {
+        active: (service.panelActive || service.windowActive) && !service.loadingLatest
+            && !service.workspaceTransitionPending && service.deferredOpenUiRestore === null
+        onAcknowledged: function(key, state) {
+            var target = service.openUiTarget
+            if (!target || target.key !== key || target.workspaceId !== service.workspaceId
+                    || service.openUiIdentity(target.turnId, target.blockIndex) !== key) return
+            var previous = OpenUi.saved(service.uiStates, target)
+            service.acceptingOpenUiAcknowledgement = true
+            var accepted = service.setUiState(target.turnId, "openui:" + target.blockIndex, state)
+            service.acceptingOpenUiAcknowledgement = false
+            if (!accepted)
+                service.openUiRuntime.refuse(service.stateNotice || "This change could not be saved.", previous)
+        }
+        onCopyRequested: text => service.copyText(text)
+        onDrained: {
+            var waiting = service.deferredOpenUiRestore
+            if (waiting) {
+                if (waiting.token === service.loadToken && service.storeEnabled && service.workspaceId)
+                    service.storeRun("save", service.workspaceSnapshot())
+                service.deferredOpenUiRestore = null
+                if (waiting.token === service.loadToken) service.applyWorkspaceSnapshot(waiting.result, waiting.carry)
+            }
+            service.queueSave()
+        }
+    }
+    function openUiIdentity(id, index) { return OpenUi.identity(workspaceId, OpenUi.target(turns, id, index)) }
+    function isPreferredOpenUi(id, index) {
+        if (openUiExplicitSelection && openUiTarget && openUiIdentity(openUiTarget.turnId, openUiTarget.blockIndex) === openUiTarget.key)
+            return openUiTarget.turnId === id && openUiTarget.blockIndex === index
+        var item = OpenUi.latest(turns)
+        return !!item && item.turnId === id && item.blockIndex === index
+    }
+    function activateOpenUi(id, index, retry) {
+        if (loadingLatest || workspaceActionPending || workspaceTransitionPending || busy || stopping || openUiPending) return false
+        var item = OpenUi.target(turns, id, index)
+        if (!item) return false
+        ensureWorkspaceId()
+        var key = OpenUi.identity(workspaceId, item)
+        if (openUiRuntime.identity === key && openUiRuntime.error && !retry) return false
+        if (retry && !openUiRuntime.unmount()) return false
+        if (retry) openUiExplicitSelection = true
+        openUiTarget = Object.assign({}, item, {key: key, workspaceId: workspaceId})
+        return openUiRuntime.mount(key, item.code, OpenUi.saved(uiStates, item))
+    }
+    function dispatchOpenUi(id, index, target, event, value) {
+        if (loadingLatest || workspaceActionPending || workspaceTransitionPending || busy || stopping
+                || openUiIdentity(id, index) !== openUiRuntime.identity) return false
+        return openUiRuntime.dispatch(target, event, value)
+    }
+    function releaseOpenUi() {
+        if (!openUiRuntime.unmount()) return false
+        openUiTarget = null
+        openUiExplicitSelection = false
+        return true
+    }
+    function resetOpenUi(id, index) {
+        if (openUiPending || busy || stopping || loadingLatest || workspaceActionPending
+                || !OpenUi.target(turns, id, index)) return false
+        return setUiState(id, "openui:" + index, {}) && activateOpenUi(id, index, true)
+    }
     // Local preview belongs to the retained service, not either disposable view.
     // Use an explicit object property: the reader's JSON `data` shadows Item.data.
     readonly property AiAttachmentPreview attachmentPreview: AiAttachmentPreview {
@@ -437,10 +508,11 @@ Item {
     property int workspaceActionSeq: 0
     property string workspaceActionError: ""
     readonly property bool workspaceActionPending: workspaceAction !== null
-    readonly property bool workspaceTransitionPending: workspaceAction !== null && workspaceAction.phase === "loading"
+    readonly property bool workspaceTransitionPending: (workspaceAction !== null && workspaceAction.phase === "loading")
+        || deferredOpenUiRestore !== null
     readonly property bool canManageWorkspace: storeEnabled && workspaceId !== ""
         && restoreSettled && (turns.length > 0 || linkedSourceId !== "" || workspaceName !== "")
-        && !busy && !stopping && !loadingLatest && !keepPending && !workspaceActionPending
+        && !busy && !stopping && !loadingLatest && !keepPending && !workspaceActionPending && !openUiPending && !workspaceTransitionPending
     property var storeQueue: []
     // Each store op is a job {op, payload, token}; the token scopes responses
     // so a stale queued load can never apply over a newer request. Results are
@@ -517,6 +589,7 @@ Item {
         if (handoffHome) interaction.handoffHome = handoffHome
         if (linkedSourceId) interaction.csvSource = {sourceId: linkedSourceId, origin: sourceOrigin}
         if (workspaceName) interaction.workspaceName = workspaceName
+        if (responseMode) interaction.responseMode = responseMode
         return {
             workspace: {id: workspaceId, title: workspaceDisplayTitle,
                 summary: latest ? String(latest.answer || "").slice(0, 200) : "",
@@ -827,6 +900,11 @@ Item {
     }
 
     function applyWorkspaceSnapshot(result, carryState) {
+        if (openUiPending) {
+            deferredOpenUiRestore = {result: result, carry: carryState, token: loadToken}
+            return false
+        }
+        releaseOpenUi()
         // Even an unchanged attachment path is a new workspace-local read.
         // The reader defers dispatch so a load's false flag cannot read the
         // outgoing attachment before this synchronous apply has finished.
@@ -854,6 +932,7 @@ Item {
         attachment = carry.attachmentEdited ? (attachmentEditedDuringLoad ? liveAttachment : carryAttachment)
             : String(result.workspace.attachment || "")
         var interaction = result.interaction || {}
+        responseMode = interaction.responseMode === "openui" ? "openui" : "native"
         workspaceName = AiState.workspaceName(interaction.workspaceName)
         // Blocks are canonical in artifacts; transcripts saved before the
         // artifact split still carry their blocks inline as a fallback.
@@ -922,7 +1001,7 @@ Item {
     }
 
     function restoreWorkspace(carryState) {
-        if (!storeEnabled || busy || stopping || loadingLatest) return
+        if (!storeEnabled || busy || stopping || loadingLatest || openUiPending) return
         storeRun("load", {latest: true}, carryState || null)
     }
 
@@ -945,7 +1024,7 @@ Item {
     }
 
     function resumeWorkspace(id, carryState) {
-        if (!storeEnabled || !id || busy || stopping || loadingLatest || workspaceActionPending) return false
+        if (!storeEnabled || !id || busy || stopping || loadingLatest || workspaceActionPending || workspaceTransitionPending || openUiPending) return false
         if (workspaceId && restoreSettled) {
             // Loading stops the outgoing debounce. Commit that conversation
             // before clearing its provider session and applying the target.
@@ -968,6 +1047,7 @@ Item {
         return kept
     }
     onTurnsChanged: {
+        openUiExplicitSelection = false
         var keptUi = retainedTurnStates(uiStates, turns)
         var keptChecks = retainedTurnStates(checklistStates, turns)
         if (Object.keys(keptUi).length !== Object.keys(uiStates).length) uiStates = keptUi
@@ -997,7 +1077,14 @@ Item {
         broker.write(JSON.stringify(message) + "\n")
     }
 
-    function copyAnswer() { Quickshell.clipboardText = AiState.textAnswer(latest, latest ? uiStates[String(latest.id)] : null) }
+    function textAnswerFor(turn) {
+        var rendered = {}
+        if (turn && openUiTarget && turn.id === openUiTarget.turnId
+                && openUiIdentity(turn.id, openUiTarget.blockIndex) === openUiRuntime.identity && openUiRuntime.tree)
+            rendered[openUiTarget.blockIndex] = OpenUi.textTree(openUiRuntime.tree)
+        return AiState.textAnswer(turn, turn ? uiStates[String(turn.id)] : null, rendered)
+    }
+    function copyAnswer() { copyText(textAnswerFor(latest)) }
 
     // Clipboard text a block asked for (a calc's own export). Only a user
     // gesture reaches this; refuses non-strings, empty text and anything over
@@ -1050,7 +1137,7 @@ Item {
     }
 
     function setUiState(id, key, value) {
-        if (workspaceTransitionPending) return false
+        if (workspaceTransitionPending && !acceptingOpenUiAcknowledgement) return false
         var all = Object.assign({}, uiStates)
         var turnMap = Object.assign({}, all[String(id)] || {})
         turnMap[String(key)] = value
@@ -1070,7 +1157,7 @@ Item {
     // answer is a valid done turn). baked = {block, entry} from AiCalcEdit.bake.
     readonly property int maxDuplicateBytes: 64 * 1024
     function duplicateCalc(baked) {
-        if (busy || stopping || loadingLatest || workspaceActionPending || workspaceTransitionPending) return false
+        if (busy || stopping || loadingLatest || workspaceActionPending || workspaceTransitionPending || openUiPending) return false
         if (storeEnabled && !restoreSettled) return false
         var plain
         try { plain = JSON.parse(JSON.stringify(baked)) } catch (error) { return false }
@@ -1146,7 +1233,7 @@ Item {
 
     function submit(prompt) {
         var text = String(prompt || "").trim()
-        if (!text || busy || stopping || loadingLatest || attachmentBlocked || workspaceActionPending) return false
+        if (!text || busy || stopping || loadingLatest || attachmentBlocked || workspaceActionPending || workspaceTransitionPending || openUiPending) return false
         if (text.length > 8000) return false
         return sendTurn(text, null)
     }
@@ -1158,7 +1245,18 @@ Item {
     // pending file alone and attaches no focus (form/choice/focus are mutually
     // exclusive on the wire). Every turn that starts consumes the pending focus.
     function sendTurn(text, linked) {
+        if (openUiPending || workspaceTransitionPending) return false
         var chosen = AiState.resolveAgent(agent, defaultAgent)
+        var mode = responseMode || (openUiEnabled && chosen === "codex" ? "openui" : "native")
+        var selectedTool = openUiExplicitSelection && openUiTarget && openUiTarget.workspaceId === workspaceId
+            && openUiIdentity(openUiTarget.turnId, openUiTarget.blockIndex) === openUiTarget.key
+            ? OpenUi.target(turns, openUiTarget.turnId, openUiTarget.blockIndex) : null
+        var tool = mode === "openui" ? selectedTool || OpenUi.latest(turns) : null
+        var toolContext = tool ? OpenUi.context(tool, uiStates) : null
+        if (tool && !toolContext) {
+            stateNotice = "This tool's saved state is too large for a follow-up. Reduce its inputs or start a new chat."
+            return false
+        }
         if (linked && !AiState.supported(chosen)) return false
         if (AiState.supported(chosen)) agent = chosen
         // Capture the active tool BEFORE appending/clearing the outgoing turn.
@@ -1214,7 +1312,10 @@ Item {
         busy = true
         stopping = false
         activity = "Thinking…"
+        responseMode = mode
         var request = {op: "submit", turnId: turnId, agent: agent, prompt: text, attachment: turn.attachment}
+        if (mode === "openui") request.responseMode = mode
+        if (toolContext) request.openuiContext = toolContext
         if (workspaceContext) request.workspaceContext = workspaceContext
         if (!turn.attachment) delete request.attachment
         if (columnTypes) request.columnTypes = columnTypes
@@ -1224,7 +1325,7 @@ Item {
         if (sourceAppliesTo(turn.attachment)) request.sourceId = csvSource.sourceId
         // The persisted provider session travels with the request so a fresh
         // broker (idle shutdown, shell reload) resumes the conversation.
-        if (sessionId) request.resumeSession = sessionId
+        if (sessionId && mode === "native") request.resumeSession = sessionId
         if (broker.running && brokerStarted) send(request)
         else {
             pending = request
@@ -1380,7 +1481,7 @@ Item {
     }
 
     function newConversation() {
-        if (busy || stopping || workspaceActionPending) return
+        if (busy || stopping || workspaceActionPending || openUiPending) return false
         attachmentPreview.invalidate()
         var wasLoading = loadingLatest
         pending = null
@@ -1389,6 +1490,7 @@ Item {
         // Any load still in flight describes the previous conversation; it
         // must not apply after a New chat, and its late output is discarded.
         ++loadToken
+        deferredOpenUiRestore = null
         loadWatchdog.stop()
         loadingLatest = false
         // A fresh conversation is immediately persistable: nothing is
@@ -1404,6 +1506,7 @@ Item {
         // The finished conversation keeps its source (linked and saved above);
         // only this client's view of it is dropped.
         resetSource()
+        releaseOpenUi()
         turns = []
         conversationModel.clear()
         checklistStates = ({})
@@ -1411,6 +1514,7 @@ Item {
         stateNotice = ""
         focusTarget = null
         agent = ""
+        responseMode = ""
         sessionId = ""
         handoffHome = ""
         attachment = ""
@@ -1423,6 +1527,7 @@ Item {
         latestRequested = true
         draftTouched = false
         refreshWorkspaceIndex()
+        return true
     }
 
     function signIn(provider) {
@@ -1444,7 +1549,7 @@ Item {
     // learning object, preserving blocks, controls, selection and values.
     // Never appends a turn and never rewrites the presented answer.
     function explainLatest(mode) {
-        if (!latest || busy || loadingLatest || stopping || workspaceActionPending) return false
+        if (!latest || busy || loadingLatest || stopping || workspaceActionPending || openUiPending) return false
         var treatment = mode === "simpler" ? "simpler"
             : mode === "example" ? "another example" : "more depth"
         var blocks = latest.blocks || []
@@ -1478,6 +1583,7 @@ Item {
         stopping = false
         activity = "Adjusting depth…"
         var request = {op: "explain", turnId: turnId, agent: agent, prompt: context}
+        if (responseMode === "openui") request.responseMode = responseMode
         if (sourceAppliesTo(latest.attachment)) request.sourceId = csvSource.sourceId
         if (sessionId) request.resumeSession = sessionId
         if (broker.running && brokerStarted) send(request)

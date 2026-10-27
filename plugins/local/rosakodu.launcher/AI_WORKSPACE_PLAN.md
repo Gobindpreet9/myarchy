@@ -1,5 +1,22 @@
 # AI Workspace: from launcher to learning, exploration, and mini-apps
 
+Current implementation (2026-10-25, `feat/launcher-openui-native`): OpenUI is now
+integrated into the native AI answer region with one retained service-owned
+worker, native QML adapters and the existing composer/turns/SQLite store. New
+Codex conversations automatically use the OpenUI profile; restored legacy
+workspaces and Hermes retain native-block generation. Historical tools can be
+selected with **Use this tool**, without multiplying runtimes. No browser or DSL
+evaluation runs in Qt. See §3.4 for the runtime/state/build contract and evidence.
+
+This is **working-tree implementation, not live desktop deployment**. Manifest/
+release stays **1.22.0**; first private checkpoint `cf483da` was pushed, but the
+current integration is not installed. No shell restart or user-workspace changes
+were made for it. Full offline suites and resource measurements are being rerun;
+no new final totals, reliability benchmark or resource-gate verdict is claimed.
+Live Wayland/mixed-DPR qualification remains pending. Earlier checkpoints below
+retain their dates and limits; missing-native-host statements describe the older
+browser experiments, not the current implementation.
+
 History-preserving maintenance correction (2026-10-06, **1.21.3**): the live
 1.21.2 check exposed that repairing the skipped cleanup path activated the
 legacy 20-unpinned/30-day deletion policy. The workspace count fell from 67 to
@@ -119,8 +136,12 @@ provider. Earlier service-check isolation claims relied on ineffective readonly
 overrides and are superseded by this fix. Documentation and test fixtures are
 identity-neutral; runtime state and credentials stay outside repository commits.
 
-Status: **Phase 3 underway; custom UI experience is the owner's priority**
-(2026-10-23; manifest still **1.22.0**, no release/canonical sync). Task-first
+Status: **Phase 3 underway; native OpenUI implemented, qualification pending**
+(2026-10-26; working tree only, manifest still **1.22.0**). The existing native
+task/calculator/CSV/workspace features remain alongside the new OpenUI path;
+neither a Phase 3 exit nor general arbitrary-code artifacts are claimed.
+
+Previous UI slice (2026-10-23; no release/canonical sync): task-first
 composition now promotes existing native tools ahead of supporting prose and
 uses task titles, an explicit long-explanation disclosure, wide form context
 rails and coordinated diagram/control columns. Stored block/state identities
@@ -164,13 +185,15 @@ launcher commit `0a4ba8e` (October 6); the initial audit found 94 installed file
 different/new before the new test-helper files. No sync, release, commit or push
 was performed.
 
-Next: keep building and evaluating useful custom UI compositions, including
-actual provider selection and end-to-end interaction quality. Persistence-refusal
+Next: finish native OpenUI regression/reproducibility and resource verification,
+then qualify actual provider selection, end-to-end interaction quality and live
+desktop lifecycle with approval before deployment. Persistence-refusal
 notices, calculator-scenario reveal/paging and CSV/Markdown parity remain a
 secondary backlog, not the owner's primary goal. Full state-aware AI revisions
-(targeted artifact patches), full conversation branching and the programmable
-runtime are not built. No Phase 3 exit or full dataset/resource qualification is
-claimed; instrumented CPU/wakeup attribution, decoded-pixel profiling and the
+(targeted artifact patches), full conversation branching and a general
+arbitrary-code artifact runtime are not built. The restricted OpenUI DSL runtime
+in §3.4 is implemented, not that broader escape hatch. No Phase 3 exit or full
+dataset/resource qualification is claimed; instrumented CPU/wakeup attribution, decoded-pixel profiling and the
 other recorded resource/live gates remain outstanding. Earlier dated checkpoint
 paragraphs retain their historical qualification limits.
 
@@ -621,20 +644,22 @@ Deferred beyond that release: multi-user collaboration, cloud account/sync, publ
 
 ### 3.1 The current baseline
 
-Findings reconciled with the installed implementation on 2026-10-22, not a new
-live verification or resource profile:
+Working-tree baseline updated 2026-10-25. OpenUI additions are not live-installed;
+the older native capabilities were reconciled with the installed tree on October
+22. This table is not a new live verification or resource profile.
 
 | Area | Current implementation | Planned evolution |
 | --- | --- | --- |
 | Entry | Canonical `ai:`, Ask AI search result, multiline composer implemented | Retain behavior during efficiency refactoring |
-| Presentation | `answer` plus at most six flat blocks | Versioned presentation tree with stable identity |
-| Composition | Title/summary, first image as hero, remaining blocks | Task-selected layouts and persistent artifacts |
+| Presentation | Existing answer envelope/blocks; Codex OpenUI profile additionally allows one bounded DSL tool rendered as a native tree | General revision-aware presentation patches |
+| Composition | Native task-first layouts; OpenUI-authored layouts/controls/SVG through QML adapters; existing editorial image layout retained | Broader real-content visual-quality evaluation |
 | Images | Wikimedia single images and captioned galleries; local candidates and fitted zoom/pan viewer | Richer role-driven retrieval, annotations, generated illustrations |
 | Controls | Learning blocks, local table sort/filter, typed calc inputs/editable data/scenarios/undo, forms, action buttons, comparison and timeline blocks, adaptive prose depth sidecars | General state transitions, plan editing and targeted revision actions |
-| State context | Ordinary submits carry bounded latest-answer/calc context; explicit form/choice/focus payloads extend it; depth uses separate bounded context | Broader interaction snapshots and revision-aware artifact patches |
+| State context | Bounded latest-answer/calc and form/choice/focus context; OpenUI follow-ups additionally carry latest completed tool code/state (48 KiB total / 12 KiB state); depth is separate | Revision-aware artifact patches, not merely new answers |
 | Suggestions | Contextual chips fill the composer without sending; selected-part targets accompany the next explicit question | Broader contextual action model |
 | Lifecycle | Lazy restore implemented (metadata-only boot; hydrate once on real AI entry); one lazy `--serve` store worker per session (one connection across a burst, strictly ordered results, idle/EOF exit); coalesced dirty-field saves (workspace row on every save, full content only when a content change raised `dirtyContent`) | Remaining lifecycle refactors |
-| Agents | Codex with hosted web lookup; Hermes without tools | Explicit adapter capability negotiation |
+| Agents | New Codex chats default to OpenUI; legacy workspaces/Hermes retain native generation; Codex hosted lookup and Hermes's no-tool boundary are unchanged | Explicit adapter capability negotiation |
+| OpenUI runtime | One lazy retained service controller, credential-free guardian/Node core evaluator, native QML presentation; explicit historical-tool selection | Live lifecycle/resource qualification; broader arbitrary-code artifacts remain separate |
 | Window | Connected Peek/Explore panel and detached normal workspace window | Remaining lifecycle, focus and multi-scale qualification |
 
 ### 3.2 Response planning and presentation contracts
@@ -676,13 +701,78 @@ the native composer, submission/Stop, turns, workspace identities and save
 ownership. Only the answer/tool region changes. The standalone page is an
 internal development harness and must not be presented as delivered integration.
 
-`launcher/embedded.tsx` in the fork now extracts only the OpenUI renderer/library,
-with a bounded versioned snapshot/state/copy/height/Escape interface and no second
-composer, provider, history or store. Its mocked Qt-host browser test brings the
-browser total to nine and checks local state round-trip/no save-echo reset/no
-HTTP API calls. The native host and save-acknowledgement lifecycle are NOT built.
+**Native implementation (2026-10-25; working tree only):** `AiService.qml` owns
+one retained `AiOpenUiRuntime.qml`; `AiAnswer`/`AiBlocks` mount disposable native
+`AiOpenUiSurface`/`View`/`Node`/`Svg` adapters in the existing answer region.
+`ai_openui_runtime.py` supervises the bundled actual `@openuidev/lang-core`
+evaluator. No WebEngine, browser runtime, React runtime or DSL evaluation enters
+Qt. Existing composer, submission/Stop, turns, artifacts, typed `calc` validation
+and SQLite ownership remain native; generic OpenUI math does not inherit the
+typed calculation engine's units/provenance guarantees.
 
-Native-host qualification found a separate blocker: loading `WebEngineView`
+- New Codex conversations automatically select `responseMode: "openui"` and may
+  author one `openui` block (`title`, bounded `code`) alongside existing blocks.
+  Restored legacy workspaces default to `native`; Hermes stays native. Mode is
+  persisted, not silently switched within an existing conversation.
+- Only one runtime/tool is selected. The latest eligible tool opens by default;
+  an earlier tool needs explicit **Use this tool**. Workspace/turn/block/code
+  mount identities and request tokens reject stale replies; state echoes do not
+  remount/reset live controls. Semantic SHA-256 event handles reject queued
+  action/input retargets even when a structural node path is reused; action
+  handles include the authored action AST so late-bound Copy payloads stay one
+  action across edits without sharing a handle with a replacement Copy.
+- Canonical acknowledged state uses
+  `uiStates[turnId]["openui:<originalBlockIndex>"]` in the existing save path.
+  Transition/snapshot gates wait for runtime acknowledgements; a pending restore
+  is deferred until drained. Duplicate retains OpenUI state opaquely, without
+  rewriting strings that resemble artifact IDs. Hidden views do not own workers;
+  the retained controller finishes queued work and retires its guardian/Node
+  after the hidden idle grace (30 s), with canonical state available to reload.
+- The credential-free guardian starts permission-limited Node >=24 (actual 26),
+  readable bundle only, with a 96 MiB old-space cap and external 3-second
+  per-request watchdog. Language/AST/action allowlists, 32 KiB programs, 64 KiB
+  state, 512 KiB frames, bounded queues and 512-node/64-depth trees are enforced.
+  There is no arbitrary HTML/JS, provider/host execution bridge, Query/Mutation,
+  external-media fetch or telemetry in this runtime. Node permissions supplement
+  the language restrictions; the heap flag is not a total-process memory budget.
+- Follow-ups send the latest completed tool's code plus saved state, bounded to
+  48 KiB total JSON and 12 KiB state. Unsupported/oversized context is refused,
+  never silently truncated/reset. Cold OpenUI brokers do not adopt untagged saved
+  provider sessions; this bounded context is not transcript reconstruction,
+  full conversation branching or an in-place artifact patch.
+- `openui/` contains build source, lockfile, upstream provenance and MIT notices.
+  `python3 -B tests/build_openui.py --check` uses scratch
+  `npm ci --ignore-scripts`, build/tests and byte-identical asset comparisons;
+  only explicit `--write` updates generated assets. `tests/run_offline.py` uses
+  private scratch HOME/XDG for all suites, including native runtime/service checks.
+
+Final scratch/offscreen verification (2026-10-26): **21 worker tests**, **649
+Python tests (2 skipped)**, **1,799 main QtTests**, 29 blocks / 23 visual /
+12 answer / 6 task-visual, all ten isolated checks, byte-identical generated
+assets and a passing audit. Action handles include a fingerprint of the authored
+action AST, so a queued Copy survives an ordinary edit but a stale conditional
+Copy cannot execute its replacement; that path has a worker regression. An
+isolated native QML + guardian/Node run measured **204.32 MiB PSS** across three
+processes and left zero owned processes after teardown (helper-only 80.58 MiB;
+event p95 1.8 ms), but this is scratch instrumentation, not live-shell resource
+cost. One real Codex garden tool generated through the production broker
+in 27.58 s was replayed as exact DSL through native `AiService`/`AiAnswer` at
+420/980px: 72 initial positions/SVG dots, then 48 at 3.6 m length / 30 cm spacing.
+Screenshots `opaque-garden-420.png` and `opaque-garden-edited-980.png` under
+`/tmp/opencode/native-openui-visual-qsgbpwid/` were read and inspected; item alpha
+was composited over the actual `#202124` Window colour. Raw model output stays
+outside the repository. This is one sample/offscreen replay, not a reliability
+benchmark or live Wayland/mixed-DPR/resource qualification. No live
+installed-plugin deployment, shell restart, version bump or
+user-workspace mutation was performed.
+
+**Historical browser-host investigation (2026-10-24; superseded for native
+integration):** `launcher/embedded.tsx` in the fork extracted only the renderer/
+library, with snapshot/state/copy/height/Escape messages and no second composer,
+provider, history or store. Nine browser checks included one mocked Qt-host
+round trip; a native browser host/save lifecycle was not built at that checkpoint.
+
+Browser-host qualification found a separate blocker: loading `WebEngineView`
 in a scratch-only Quickshell config crashed with `Argument list is empty ...
 QCoreApplication`. Log:
 `/tmp/opencode/native-openui-engine-28145hly/check.log`. The live shell was not
@@ -690,23 +780,12 @@ used. Installed Quickshell's startup lacks Qt WebEngine Quick's documented early
 initialization, and the exact fatal is its hard-coded Qt `argc = 0`, confirmed in
 matching `launch.cpp`. No supported CLI/pragma workaround was found. Do not
 hot-load the browser into the actual launcher or change the shell binary/startup
-without separate owner approval. Evaluate
-safe host support or a native QML adapter over the framework-independent OpenUI
-core. The standalone browser's cost is NOT an embedded-runtime measurement.
+without separate owner approval. The native QML/core alternative above avoids
+this browser-host dependency. The standalone browser's cost is NOT an embedded-
+or native-runtime measurement.
 
-Planned native contract: one `openui` block (`title`, bounded `code`) alongside
-fallback prose in the existing answer envelope; same artifacts/interaction store,
-`uiStates[turnId]["openui:<originalBlockIndex>"]`, existing composer and providers.
-Keep native `calc` validation unchanged. Rich guidance needs its own measured
-budget/profile, not a raw-program prompt accidentally combined with the native
-JSON schema. Code must validate against the actual restricted library before
-every mount, including restored answers. Mount/workspace/turn/block identities,
-acknowledged state flush on transition/close, text fallback and opaque-state
-duplication all need regressions before enabling the path. This is a plan, not
-completed native plumbing.
-
-**Decision and working prototype (2026-10-24):** the owner authorised proceeding
-after the comparison. Use [OpenUI core](https://github.com/thesysdev/openui)
+**Historical decision and working prototype (2026-10-24):** the owner authorised
+proceeding after the comparison. Use [OpenUI core](https://github.com/thesysdev/openui)
 (`lang-core` + `react-lang`) as the framework and reuse the Thesys demo's
 components/functions. CopilotKit's reviewed app
 (`8391a94c1c3939c679e40ddd7bfc08a9ef690e70`) remains a free-form HTML/canvas/3D
@@ -746,8 +825,8 @@ local interactions, with no page errors/external browser requests. Not a broad
 provider-quality or source/claim verification benchmark. No user workspace writes.
 Review subagents hit quota, so independent review remains outstanding.
 
-**Do not switch the native renderer yet:** a headless reference measured
-435–437 MiB aggregate PSS (browser/GPU subprocesses + Python, ten processes),
+**Browser candidate rejected for native replacement at this checkpoint:** a
+headless reference measured 435–437 MiB aggregate PSS (browser/GPU subprocesses + Python, ten processes),
 above the 256 MiB optional-runtime allowance. GPU-off variants were no better;
 cleanup left zero owned processes. 51ms server readiness / 411ms first useful
 fixture and 1.5% one-core CPU over four early seconds are short headless
@@ -756,12 +835,13 @@ observations, NOT settled CPU/Wayland/DPR or 50-cycle qualification. Reports:
 `/tmp/opencode/openui-renderer-cost-b2Nm74/report.json`. Generated-output replay
 screenshots/report: `/tmp/opencode/openui-generated-ui-q9a0vj/`; real programs
 under `/tmp/opencode/openui-live-mh4yxqpr/` and `openui-live-qbw6addk/`.
-These scratch artifacts are ephemeral. Pursue a lighter isolated host before
-shipping integration; Qt WebEngine Quick development libs are installed, CMake
-is absent. No native deletion, installed-renderer change, shortcut, release,
+These scratch artifacts are ephemeral. This motivated the lighter native-QML/core
+implementation above, whose resource qualification remains separate. At that
+checkpoint Qt WebEngine Quick development libs were installed, CMake
+was absent. No native deletion, installed-renderer change, shortcut, release,
 version bump, canonical sync, commit or push. The native fallback stays intact.
 
-**Reuse candidate supplied by the owner (2026-10-23):**
+**Historical reuse candidate supplied by the owner (2026-10-23):**
 [Open Intelligent UI](https://github.com/thesysdev/open-intelligent-ui) and
 [OpenUI](https://github.com/thesysdev/openui) are MIT-licensed. Source review
 confirmed model-authored layout trees, shared reactive variables, local actions,
@@ -823,7 +903,7 @@ Levels 1 and 2 should cover normal requests efficiently; Level 3 supplies the lo
 | Files | One bounded text attachment | Attachment collection, CSV first, then PDF/image ingestion with adapter capability checks |
 | CSV sampling/data | Bounded provider prefix snapshot, local preview/type correction, durable kept source, paged explorer and exact supported statistics | Remaining delivery/resource qualification and broader dataset bindings |
 | Geographic exploration | None | Map renderer/data provider selection during its milestone |
-| Tool execution | Bounded native typed computation, editable data, scenarios and local undo | Revision reconciliation and isolated programmable runtime |
+| Tool execution | Bounded native typed computation, editable data/scenarios/local undo; restricted OpenUI core DSL with native QML presentation | Revision reconciliation, runtime qualification and broader arbitrary-code artifacts |
 
 A provider-specific feature must be discoverable through capabilities; do not silently imply that an adapter supports image understanding, structured updates, or web lookup when it does not. Keep existing agent sessions pinned, and provide an explicit path when a requested capability needs another adapter.
 
@@ -935,15 +1015,19 @@ Each component declares its input schema, persistent state, local events, semant
 
 ### 4.5 Existing file evolution
 
-Names for new modules below are proposed responsibilities, not files already present.
+Rows marked implemented describe current working-tree modules, not live
+deployment. Other changes below remain planned evolution.
 
-| Existing file | Planned change |
+| File | Implementation / planned evolution |
 | --- | --- |
 | `LauncherPanel.qml` | `ai:` entry, saved workspace results, surface transitions, focus/window handoff |
 | `AiState.js` | New prefix parsing; move from turn-index UI state to workspace/artifact identity |
 | `AiComposer.qml` | Multiline input, attachments, selected-object target, busy/stop behavior |
 | `AiPane.qml` | Workspace host, lazy/virtualised history, contextual actions, surface-independent state; do not instantiate collapsed answers |
-| `AiAnswer.qml` / `AiBlocks.qml` | Existing renderer adapter plus new component registry/presentation tree |
+| `AiAnswer.qml` / `AiBlocks.qml` | Existing native renderer plus integrated OpenUI answer surface |
+| `AiOpenUiRuntime.qml` / `ai_openui_runtime.py` | Implemented retained controller, bounded IPC and credential-free Node supervision; qualify live lifecycle/resource costs |
+| `AiOpenUiState.js` / `AiOpenUiSurface.qml` / `AiOpenUiView.qml` / `AiOpenUiNode.qml` / `AiOpenUiSvg.qml` / `AiOpenUiNative.js` | Implemented inert state/routing and native layout/control/SVG presentation; extend only with matching restricted schema/tests |
+| `openui/` | Actual core worker, adapted library/function source, generated prompt/schema, lockfile and MIT provenance; scratch reproducibility check before asset updates |
 | `AiImage.qml` / `AiChart.qml` | Richer viewer/chart controls and bindings to persistent state |
 | `AiService.qml` | Lightweight controller, acknowledged/coalesced saves, lazy restore, idle helper shutdown; avoid retaining duplicate full histories |
 | `ai_workspace_store.py` | Preserve SQLite schema and tests; add burst-oriented worker transport, incremental updates, paged reads, and ordered flush/close |
@@ -1275,6 +1359,10 @@ Deliverables:
 Exit: the comparison tool, a scenario calculator, and a CSV explorer work with user changes, accurate local computations, persistence, and state-aware AI revisions. The dataset stress fixture remains responsive with bounded memory, queued updates, and write volume.
 
 ### Phase 4 — Bespoke artifacts and richer media
+
+The native OpenUI path in §3.4 is now a restricted declarative-runtime foundation,
+not completion of this broader arbitrary-code/media phase. It is not yet deployed
+or qualified against the live lifecycle/resource gates.
 
 Deliverables:
 

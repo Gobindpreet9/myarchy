@@ -10,7 +10,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 CHECKS = ["AiServiceCheck", "AiWorkspaceStoreCheck", "AiWorkspaceContextCheck",
           "AiSeamsServiceCheck", "AiCsvSourceCheck", "AiAttachmentPreviewCheck",
-          "AiPreviewServiceCheck", "AiDetachedWindowCheck"]
+          "AiPreviewServiceCheck", "AiDetachedWindowCheck", "AiOpenUiServiceCheck", "AiOpenUiRuntimeCheck"]
 SUITES = ["main", "AiBlocksCheck", "AiVisualCheck", "AiAnswerCheck", "AiTaskVisualCheck"]
 
 

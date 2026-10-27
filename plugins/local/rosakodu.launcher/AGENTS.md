@@ -1,5 +1,63 @@
 # rosakodu.launcher agent notes
 
+Native OpenUI integration (2026-10-25, **working tree, not live-installed**):
+new Codex conversations automatically select `responseMode: "openui"`; restored
+legacy workspaces default to `native`, and Hermes stays native. The existing
+composer, turns, artifacts and SQLite store retain ownership. Manifest/release
+stays **1.22.0**. First private-branch checkpoint `cf483da` was pushed; that is
+not deployment of the current native integration. Do not install into the live
+plugin, restart the shell or touch user workspaces without separate approval.
+
+`AiService.qml` owns ONE retained `AiOpenUiRuntime.qml`, not one per answer
+Loader. Native `AiOpenUiSurface`/`View`/`Node`/`Svg` adapters present a bounded
+inert tree from the actual OpenUI core worker; no WebEngine/browser, React
+runtime or DSL evaluation in Qt. Latest eligible tools open automatically;
+historical tools require explicit **Use this tool**, with one selected runtime.
+Mount identities include workspace/turn/block/code; save echoes must not remount.
+Drain event acknowledgements before transitions/snapshots. Persist canonical
+state in `uiStates[turnId]["openui:<blockIndex>"]`; duplication must copy those
+values opaquely, never artifact-remap strings inside user state.
+
+`ai_openui_runtime.py` is a credential-free guardian for permission-limited
+`/usr/bin/node` (>=24; actual 26). It allows reading the bundled worker only,
+caps Node old space at 96 MiB and enforces an external 3-second request deadline.
+Program/state/frame caps are 32/64/512 KiB; queues, AST/actions, node count and
+depth are bounded. Worker-generated semantic SHA-256 handles bind queued events
+to their action or input binding/options/range: never retarget by structural
+node path alone. Action identity also fingerprints the authored action AST, so
+a late-bound Copy payload keeps one handle across ordinary edits while a
+replacement conditional Copy cannot inherit a stale handle. These are
+stale-event guards, not authentication. No provider,
+filesystem/network action bridge, arbitrary HTML/JS, Query/Mutation or telemetry.
+Keep the native typed `calc` engine/validation; generic OpenUI math is not its
+units/provenance equivalent.
+
+`AiOpenUiState.js` supplies inert routing/copy/follow-up snapshots only. OpenUI
+follow-ups carry at most 48 KiB code/state JSON, including 12 KiB of state;
+refuse oversized/unsupported state rather than truncate/reset it misleadingly.
+Cold OpenUI brokers do not resume untagged persisted sessions; this snapshot is
+not transcript reconstruction or targeted in-place artifact revision.
+
+Reproducibility: `python3 -B tests/build_openui.py --check` uses scratch
+`npm ci --ignore-scripts`, build/tests and byte comparisons; only explicit
+`--write` updates generated assets. Keep `openui/` source, lockfile, upstream
+provenance and complete MIT notices together. `python3 -B tests/run_offline.py`
+isolates every check, including native runtime/service/store checks. Final
+scratch pass (2026-10-26): **21 worker tests**, **649 Python tests (2 skipped)**,
+**1,799 main QtTests**, 29 blocks / 23 visual / 12 answer / 6 task-visual,
+all ten isolated checks, byte-identical generated assets and a passing audit.
+The action-handle regression pins distinct authored conditional Copy actions at
+one structural path while preserving same-action Copy across ordinary edits.
+One production-broker
+Codex garden sample (27.58 s) replayed natively at 420/980px: 72 initial SVG
+positions, then 48 at 3.6 m / 30 cm. The two opaque screenshots under
+`/tmp/opencode/native-openui-visual-qsgbpwid/` were read and inspected, compositing
+item alpha over the actual `#202124` Window colour. Raw model output is not in
+the repository. This is not a reliability benchmark; resource remeasurement,
+live Wayland/mixed-DPR and installed-desktop qualification remain pending.
+
+## Earlier checkpoints (retain their dated scope)
+
 Repository checkpoint (2026-10-25): active development is now in the private
 owner repository on `feat/launcher-openui-native`. Preserve the installed
 October native task/calculator/CSV/workspace work before replacing presentation.
@@ -20,21 +78,23 @@ calculation duplication follows the host's availability gate. Review covered
 security, consistency and UX; the broad quality reviewer hit its usage limit.
 No live deployment or Wayland/mixed-DPR qualification is implied by this work.
 
-Owner clarification (2026-10-24): intelligent UI belongs INSIDE the native
+Owner clarification (2026-10-24; constraint retained, native implementation now
+above): intelligent UI belongs INSIDE the native
 launcher's existing AI experience, with its composer, turns and saved state.
 The standalone OpenUI page is a development harness only, not a product
-destination or a manual step the owner should need. Native embedding and its
-resource/lifecycle costs are integration work; do not substitute an external
-app or present the preview command as completion.
+destination or a manual step the owner should need. Native embedding was then
+pending; resource/lifecycle qualification remains open. Do not substitute an
+external app or present the preview command as completion.
 
-The renderer-only `launcher/embedded.*` entry now has no second composer/store
+Historical browser-host investigation (superseded by the native QML path):
+the renderer-only `launcher/embedded.*` entry had no second composer/store
 and one mocked-host round-trip check (nine browser checks total). Do NOT import
 Qt WebEngine into the live launcher yet: a scratch Quickshell instantiation
 crashed with `Argument list is empty ... QCoreApplication`; current host startup
 hard-codes Qt `argc = 0` and also lacks early WebEngine setup. No supported flag
 workaround was found. Do not modify/replace the shell binary or startup without
-separate approval. This is not a delivered native host; evaluate a QML adapter
-over framework-independent OpenUI core as well.
+separate approval. This browser experiment was not a delivered native host;
+the framework-independent-core/QML alternative is now implemented above.
 
 OpenUI prototype checkpoint (2026-10-24): owner approved autonomous investigation
 and implementation after comparing Thesys and CopilotKit. Chosen foundation is
@@ -60,14 +120,15 @@ saves, invalid model output and generation cancellation have regressions.
 Scratch state only; native workspaces untouched. Real-provider results are one
 small sample, not a reliability benchmark; complete-answer Codex latency remains.
 
-BLOCKER before native replacement: headless Chromium + backend used ~435–437 MiB
+Historical browser-candidate blocker: headless Chromium + backend used ~435–437 MiB
 aggregate PSS (10 processes), above the 256 MiB optional-runtime gate. GPU-off
 variants did not fix it. Cleanup left zero owned processes; startup/CPU figures
 are short headless observations, not live Wayland qualification. Keep the preview
 explicit (`npm --prefix ~/Work/launcher-openui run launcher:open`); no
-desktop shortcut or shell preload was installed. Next evaluate a lighter isolated
-host, not more fixed widget types. Qt WebEngine Quick development libs exist;
-CMake is absent. Independent review agents hit quota; no review pass claimed.
+desktop shortcut or shell preload was installed. This led to the lighter isolated
+core/native-QML host above, not more fixed widget types. Qt WebEngine Quick
+development libs existed; CMake was absent. Independent review agents hit quota;
+no review pass claimed.
 No release, version bump, commit, push, canonical sync or deletion of native work.
 
 Current owner priority (2026-10-22, implemented 2026-10-23): **custom UI quality
@@ -162,8 +223,8 @@ scenario exports (CSV omits table-formula rows; Markdown also omits differing
 inputs). These gaps still exist by read-only inspection. Dynamic-control/focus
 live clicks and the October 10 compare-body/stale-QML issue remain unverified.
 No Phase 3 exit, targeted artifact patching, full conversation branching or
-programmable runtime is claimed. Current prompt guards are 13,000 / 15,000 /
-26,000 bytes (Codex / Hermes / full), schema 13,500; the conversation budget is
+general arbitrary-code artifact runtime is claimed. Native-profile prompt guards
+are 13,000 / 15,000 / 26,000 bytes (Codex / Hermes / full), schema 13,500; the conversation budget is
 192 KiB, not the historical 64 KiB (still the plain-text attachment cap).
 
 Automatic maintenance MUST send `{preserveWorkspaces: true}`. The old explicit

@@ -57,6 +57,7 @@ ColumnLayout {
         && service.workspaceActionPending
     readonly property string workspaceActionError: service && typeof service.workspaceActionError !== "undefined"
         ? String(service.workspaceActionError || "") : ""
+    readonly property string stateNotice: service && typeof service.stateNotice === "string" ? service.stateNotice : ""
     readonly property bool canManageWorkspace: !!service && typeof service.canManageWorkspace !== "undefined"
         && service.canManageWorkspace === true && !workspaceActionPending
     readonly property bool workspaceNamed: !!service && typeof service.workspaceName !== "undefined" && !!service.workspaceName
@@ -356,7 +357,7 @@ ColumnLayout {
     Column {
         id: workspaceStatus
         objectName: "aiWorkspaceStatus"
-        visible: pane.workspaceActionPending || pane.workspaceActionError.length > 0
+        visible: pane.workspaceActionPending || pane.workspaceActionError.length > 0 || pane.stateNotice.length > 0
         Layout.fillWidth: true
         Layout.preferredHeight: visible ? implicitHeight : 0
         spacing: Satin.space.tip
@@ -376,6 +377,17 @@ ColumnLayout {
             visible: text.length > 0
             width: parent.width
             text: pane.workspaceActionError
+            textFormat: Text.PlainText
+            wrapMode: Text.Wrap
+            color: pane.foreground
+            font.pixelSize: Satin.type.small
+            Accessible.name: text
+        }
+        Text {
+            objectName: "aiStateNotice"
+            visible: text.length > 0
+            width: parent.width
+            text: pane.stateNotice
             textFormat: Text.PlainText
             wrapMode: Text.Wrap
             color: pane.foreground
@@ -560,7 +572,7 @@ ColumnLayout {
         AiButton {
             objectName: "aiNewChat"
             text: "New chat"
-            enabled: !pane.workspaceActionPending
+            enabled: !pane.workspaceActionPending && !(pane.service && pane.service.openUiPending)
             foreground: pane.foreground; accent: pane.accent
             onClicked: {
                 pane.service.newConversation()
@@ -722,8 +734,9 @@ ColumnLayout {
                 width: parent.width
                 turn: turnRow.modelData
                 turnIndex: turnRow.index
+                openUiService: pane.service
                 calcCanDuplicate: pane.service && !pane.service.busy && !pane.service.stopping
-                    && !pane.service.loadingLatest && !pane.service.workspaceActionPending
+                    && !pane.service.loadingLatest && !pane.service.workspaceActionPending && !pane.service.openUiPending
                 calcDuplicateHint: qsTr("Wait for the current request or workspace action to finish.")
                 title: AiState.answerTitle(turnRow.modelData)
                 failed: turnRow.modelData.status === "error"

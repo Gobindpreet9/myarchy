@@ -696,7 +696,9 @@ def _remap_artifact_refs(value, mapping):
             entry = mapping.get(entry, entry)
         if new_key in result:
             raise StoreError("Stored workspace data cannot be duplicated")
-        result[new_key] = _remap_artifact_refs(entry, mapping)
+        # Generated UI state is user data, not workspace/artifact metadata.
+        # A user's object may legitimately contain artifactId/checklist keys.
+        result[new_key] = entry if key.startswith("openui:") else _remap_artifact_refs(entry, mapping)
     return result
 
 

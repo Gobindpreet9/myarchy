@@ -77,7 +77,7 @@ ShellRoot {
         var component = Qt.createComponent(Qt.resolvedUrl("AiService.qml"))
         if (component.status !== Component.Ready) { console.error(component.errorString()); Qt.exit(1); return }
         var scratch = Quickshell.env("XDG_STATE_HOME") + "/preview-service"
-        service = component.createObject(check, {storeEnabled: false, stateRoot: scratch,
+        service = component.createObject(check, {storeEnabled: false, openUiEnabled: false, stateRoot: scratch,
             brokerScript: brokerScript, storeScript: brokerScript})
         if (!service) { console.error(component.errorString()); Qt.exit(1); return }
         eq(service.storeEnabled, false, "Store is disabled")

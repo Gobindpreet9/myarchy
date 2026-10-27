@@ -1,0 +1,56 @@
+export interface Example {
+  id: string;
+  title: string;
+  description: string;
+  prompt: string;
+  program: string;
+}
+
+// Hand-authored qualification fixtures, explicitly labelled as examples in the UI.
+// Every control uses OpenUI state/actions. None calls the provider.
+export const examples: Example[] = [
+  {
+    id: "meal", title: "Dinner, scaled to your table",
+    description: "Change the guest count. The quantities and shopping list follow.",
+    prompt: "Make a vegetarian pasta dinner planner with servings, a shopping checklist and a cooking sequence.",
+    program: `root = Col([head, Grid([ingredients, method], 2, 290, 6), note])
+$guests = 4
+$got = []
+$stage = 0
+head = Col([Caption("THE EVERYDAY TABLE"), Title("Pasta night, without the guesswork", "xl"), Text("Tomato, basil and white-bean pasta. Scale dinner, then tick off what you already have.", "md", "muted"), Slider($guests, 1, 12, 1, "People at the table"), Row([Badge("25 minutes", null, "clock"), Badge("Vegetarian", "success"), Badge(@Count($got) + " of 6 ingredients ready")], 2, null, null, true)], 3)
+base = [{name: "Pasta", qty: 400, unit: "g"}, {name: "Chopped tomatoes", qty: 800, unit: "g"}, {name: "White beans, drained", qty: 480, unit: "g"}, {name: "Olive oil", qty: 2, unit: "tbsp"}, {name: "Garlic", qty: 4, unit: "cloves"}, {name: "Fresh basil", qty: 20, unit: "g"}]
+scaled = @Each(base, "i", {name: i.name, amount: @Round(i.qty * $guests / 4, 1) + " " + i.unit})
+ingredients = Card([Row([Title("Shopping list", "md"), Spacer(), Button("Clear checks", @Set($got, []), "ghost", null, "sm")], 2), Col(@Each(scaled, "i", Pressable([Row([Icon(@Includes($got, i.name) ? "circle-check" : "circle", "sm", @Includes($got, i.name) ? "success" : "muted"), Text(i.name, "sm", null, "medium", false, @Includes($got, i.name)), Spacer(), Text(i.amount, "sm", "muted", null, false, false, true)], 2)], @Set($got, @Toggle($got, i.name)), @Includes($got, i.name), 3)), 1), Button("Copy shopping list", @CopyToClipboard(@Join(@Each(scaled, "i", i.name + ": " + i.amount), "\\n")), "outline", null, "sm", "copy")], null, 5, 4)
+steps = [{title: "Get the water going", text: "Bring a large pan of salted water to the boil. Slice the garlic and drain the beans."}, {title: "Build the sauce", text: "Warm the oil. Soften the garlic for a minute, add the tomatoes and beans, then simmer for 12 minutes."}, {title: "Bring it together", text: "Cook the pasta until just tender. Reserve a cup of pasta water, then toss with the sauce. Loosen as needed and finish with basil."}]
+method = Col([Caption("AT THE STOVE"), Title(steps[$stage].title, "lg"), Text(steps[$stage].text, "md"), Row([Button("Previous", @Set($stage, @Clamp($stage - 1, 0, 2)), "outline", null, "sm", "arrow-left", $stage == 0), Text(($stage + 1) + " / 3", "sm", "muted"), Button("Next step", @Set($stage, @Clamp($stage + 1, 0, 2)), "solid", null, "sm", "arrow-right", $stage == 2)], 3, "center", "between"), Divider(), Caption("Season to taste. The ingredient amounts scale; the cooking time is an estimate, not a promise.")], 4)
+note = Caption("Example recipe · quantities are illustrative. Check ingredients for your dietary needs.")`,
+  },
+  {
+    id: "plan", title: "A launch plan you can work through",
+    description: "One linked plan, a focused next step and progress that stays saved.",
+    prompt: "Build a three-stage personal website launch plan with a local checklist, next-step detail and editable project name.",
+    program: `root = Col([head, Input($name, "Project name"), Grid([outline, detail], 2, 280, 6)])
+$name = "My personal site"
+$done = []
+$selected = 0
+phases = [{title: "Decide what belongs", tag: "01 · SCOPE", text: "Choose the one thing visitors should do. Keep a short bio, two pieces of work and a way to get in touch.", outcome: "A page outline with one clear call to action."}, {title: "Build the smallest version", tag: "02 · BUILD", text: "Write the real copy first. Build the page around it, then check it on a phone and navigate it using only the keyboard.", outcome: "A readable, working page on a preview URL."}, {title: "Put it in front of someone", tag: "03 · LAUNCH", text: "Ask a friend to find your work and contact you. Fix what trips them up, check the links and publish.", outcome: "A public URL you are happy to share."}]
+head = Col([Caption("FROM IDEA TO URL"), Title($name, "xl"), Text("A small plan with a concrete finish. Pick a stage to inspect it; mark it complete when its outcome is real.", "md", "muted"), Row([Badge(@Count($done) + " of 3 complete", @Count($done) == 3 ? "success" : "info"), Caption(@Count($done) == 3 ? "Ready to share." : "Select any stage below.")], 3, null, null, true)], 3)
+outline = Col(@Each(@Range(0, 3), "i", Pressable([Row([Icon(@Includes($done, i) ? "circle-check" : "circle", "md", @Includes($done, i) ? "success" : "muted"), Col([Caption(phases[i].tag), Text(phases[i].title, "md", null, "medium")], 1), Spacer(), Icon("chevron-right", "sm")], 3)], @Set($selected, i), $selected == i, 4)), 2)
+detail = Card([Caption(phases[$selected].tag), Title(phases[$selected].title, "lg"), Text(phases[$selected].text, "md"), Divider(), Label("DONE LOOKS LIKE"), Text(phases[$selected].outcome, "sm"), Button(@Includes($done, $selected) ? "Mark as unfinished" : "Mark stage complete", @Set($done, @Toggle($done, $selected)), @Includes($done, $selected) ? "outline" : "solid", null, "md", "check"), Button("Reset progress", @Set($done, []), "ghost", null, "sm")], null, 5, 4)`,
+  },
+  {
+    id: "learn", title: "Why a longer lever feels easier",
+    description: "Move the effort point and watch the diagram and force change together.",
+    prompt: "Explain levers with an interactive labelled drawing. Let me change effort-arm length and load, show the force calculation and ask a check question.",
+    program: `root = Col([head, Grid([drawing, controls], 2, 290, 6), check, note])
+$arm = 2
+$load = 120
+$answer = "Not answered"
+force = @Round($load / $arm, 1)
+head = Col([Caption("A LITTLE PHYSICS, MADE TANGIBLE"), Title("Less force. More distance.", "xl"), Text("A lever trades how hard you push for how far you move. Slide the effort point away from the pivot and watch what changes.", "md", "muted")], 3)
+drawing = Col([Svg([Line(36, 120, 310, 120, "ink", 7), Polygon("100,126 84,158 116,158", "muted"), Rect(40, 86, 32, 28, "chart1", null, null, null, 4), Line(56, 52, 56, 78, "chart1", 3), Polygon("56,84 50,74 62,74", "chart1"), SvgText($load + " N load", 56, 38, 13, "ink", "middle"), Line(100 + $arm * 52, 52, 100 + $arm * 52, 106, "chart2", 3), Polygon((100 + $arm * 52) + ",114 " + (94 + $arm * 52) + ",104 " + (106 + $arm * 52) + ",104", "chart2"), SvgText(force + " N effort", 100 + $arm * 52, 38, 13, "ink", "middle"), SvgText("Load arm: 1 m", 48, 208, 12, "muted", "start"), SvgText("Effort arm: " + $arm + " m", 210, 208, 12, "muted", "middle"), SvgText("pivot", 100, 178, 11, "muted", "middle")], "0 0 340 230"), Caption("Diagram is schematic; labels give the modelled arm lengths.")], 2)
+controls = Card([Slider($arm, 1, 4, 0.5, "Effort arm", " m"), Slider($load, 60, 240, 20, "Load force", " N"), Divider(), Caption("FORCE NEEDED TO BALANCE"), Title(force + " N", "2xl"), Text($load + " N × 1 m ÷ " + $arm + " m = " + force + " N", "sm", "muted"), Caption("At " + $arm + "× the arm length, your end moves " + $arm + "× as far for the same small rotation.")], "soft", 5, 3)
+check = Col([Title("Try a prediction", "md"), Text("Keep the load the same. What happens to the required effort if you double the effort arm?", "sm"), RadioGroup($answer, ["It doubles", "It halves", "It stays the same"], "Your prediction", "pills"), Text($answer == "Not answered" ? "Choose an answer, then use the slider to check." : $answer == "It halves" ? "Exactly. Force × arm length must balance on both sides." : "Try comparing 1 m and 2 m on the slider. The same load needs half the effort at twice the arm.", "sm", $answer == "It halves" ? "success" : "muted")], 3)
+note = Caption("Ideal static model · rigid lever, negligible lever weight and friction. Not a design or lifting-safety calculation.")`,
+  },
+];

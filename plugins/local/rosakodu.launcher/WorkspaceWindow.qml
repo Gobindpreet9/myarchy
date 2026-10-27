@@ -88,7 +88,8 @@ FloatingWindow {
             busy: workspace.service ? workspace.service.busy : false
             stopping: workspace.service ? workspace.service.stopping : false
             loading: !!workspace.service && (workspace.service.loadingLatest
-                || (typeof workspace.service.workspaceActionPending !== "undefined" && workspace.service.workspaceActionPending))
+                || (typeof workspace.service.workspaceActionPending !== "undefined" && workspace.service.workspaceActionPending)
+                || (typeof workspace.service.openUiPending !== "undefined" && workspace.service.openUiPending))
             attachmentBlocked: !!workspace.service && typeof workspace.service.attachmentBlocked !== "undefined"
                 && workspace.service.attachmentBlocked
             hasConversation: workspace.service ? workspace.service.turns.length > 0 : false

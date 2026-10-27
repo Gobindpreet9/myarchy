@@ -1,0 +1,178 @@
+{
+  "protocol": 1,
+  "coreVersion": "1.0.0",
+  "dependencyVersions": {
+    "@openuidev/lang-core": "1.0.0",
+    "zod": "4.6.6",
+    "esbuild": "0.28.2"
+  },
+  "upstreamRevision": "03213439358bf3408ad61a46ec9e3230c5572e48",
+  "upstreamCoreSha256": "9e77ef9228181586002cb0b0d8a409a9e08dfa663099009b87a38d55b94bce4a",
+  "runtimeTelemetry": false,
+  "componentNames": [
+    "Col",
+    "Row",
+    "Grid",
+    "Card",
+    "Box",
+    "Divider",
+    "Spacer",
+    "Title",
+    "Text",
+    "Caption",
+    "Label",
+    "Badge",
+    "Button",
+    "IconButton",
+    "Pressable",
+    "Input",
+    "TextArea",
+    "Slider",
+    "Checkbox",
+    "Select",
+    "SegmentedControl",
+    "RadioGroup",
+    "Icon",
+    "Svg",
+    "Circle",
+    "Ellipse",
+    "Rect",
+    "Line",
+    "Path",
+    "Polyline",
+    "Polygon",
+    "G",
+    "SvgText"
+  ],
+  "functionNames": [
+    "Append",
+    "Prepend",
+    "Concat",
+    "Remove",
+    "RemoveAt",
+    "Update",
+    "Toggle",
+    "Includes",
+    "Find",
+    "IndexOf",
+    "Take",
+    "Slice",
+    "Unique",
+    "Reverse",
+    "Range",
+    "Pick",
+    "Shuffle",
+    "Flatten",
+    "Chunk",
+    "Pow",
+    "Sqrt",
+    "Random",
+    "Clamp",
+    "Percent",
+    "Lerp",
+    "Allocate",
+    "Payment",
+    "Convert",
+    "Format",
+    "Join",
+    "Plural",
+    "Pad",
+    "Upper",
+    "Lower",
+    "Trim",
+    "Capitalize",
+    "Split",
+    "Replace",
+    "Duration",
+    "Default",
+    "MixColor",
+    "Now",
+    "Today",
+    "FormatDate",
+    "AddDays",
+    "AddMonths",
+    "DaysBetween",
+    "MonthsBetween",
+    "StartOf",
+    "GroupBy",
+    "Pivot",
+    "Top",
+    "Between",
+    "Bucket",
+    "Cumulative",
+    "MovingAvg",
+    "Change",
+    "Histogram",
+    "Stats"
+  ],
+  "actions": [
+    "Set",
+    "Reset",
+    "CopyToClipboard"
+  ],
+  "reactiveProps": {
+    "Input": [
+      "value"
+    ],
+    "TextArea": [
+      "value"
+    ],
+    "Slider": [
+      "value"
+    ],
+    "Checkbox": [
+      "checked"
+    ],
+    "Select": [
+      "value"
+    ],
+    "SegmentedControl": [
+      "value"
+    ],
+    "RadioGroup": [
+      "value"
+    ]
+  },
+  "limits": {
+    "frameBytes": 524288,
+    "programBytes": 32768,
+    "stateBytes": 65536,
+    "stateVariables": 40,
+    "statements": 160,
+    "nodes": 512,
+    "propStringBytes": 4096,
+    "textAreaBytes": 32768,
+    "actionSteps": 8,
+    "tokenBytes": 128,
+    "jsonDepth": 64,
+    "jsonValues": 32768
+  },
+  "runtimeReactInputs": 0,
+  "exampleAdaptations": "All three existing launcher examples unchanged, including upstream Icon and SVG. No behavior omitted.",
+  "artifacts": {
+    "native-worker.cjs": {
+      "bytes": 559483,
+      "sha256": "08f9221ee5c764e3209e04d05feb554f98a34833f804cfce2707ee1f1c4b29ac"
+    },
+    "native-system-prompt.txt": {
+      "bytes": 28599,
+      "sha256": "7b083dabad3acf68250fa60357923cc306f372221cf01714667bdd929236f688"
+    },
+    "native-examples.json": {
+      "bytes": 8272,
+      "sha256": "07285363c70e015d9578917a8d9a51ecd616c1f9e9ef8b9cbab6867c9c6afca6"
+    },
+    "native-schema.json": {
+      "bytes": 32489,
+      "sha256": "b8310fa84f1280d939b9bb62e7d8e990e0981c9f190c08d6594ae8c85a91fc4f"
+    },
+    "native-reactive.json": {
+      "bytes": 153,
+      "sha256": "6b8cff99b36535dbbd1ac08bf0f86b98a922e620a79ab03dfb69ba47e117efb3"
+    },
+    "native-worker.meta.json": {
+      "bytes": 63749,
+      "sha256": "a2d1767a9f91453fc9ca385fbbc086c97a96f9a4aee9dbfbd80322d019b05bd2"
+    }
+  }
+}

@@ -430,7 +430,7 @@ Item {
     function submitAi() {
         if (!root.service) return "no-service"
         var prompt = AiState.prompt(root.query)
-        if (root.service.busy || root.service.stopping || root.service.workspaceActionPending) {
+        if (root.service.busy || root.service.stopping || root.service.workspaceActionPending || root.service.openUiPending) {
             root.feedbackText = root.service.workspaceActionPending ? "Saving your workspace…" : "Wait for the answer, or press Stop."
             feedbackTimer.restart()
             return "busy"
@@ -652,7 +652,7 @@ Item {
         }
         function newchat(): string {
             // Test-only: equivalent to pressing New chat in the toolbar.
-            if (!root.service || root.service.busy || root.service.workspaceActionPending) return "busy"
+            if (!root.service || root.service.busy || root.service.workspaceActionPending || root.service.openUiPending) return "busy"
             root.service.newConversation()
             root.query = AiState.prefix
             return "ok"
@@ -660,7 +660,7 @@ Item {
         function submit(text: string): string {
             // Test-only: drive the exact submit path without keyboard input.
             if (!root.service) return "no-service"
-            if (root.service.busy || root.service.stopping || root.service.workspaceActionPending) return "busy"
+            if (root.service.busy || root.service.stopping || root.service.workspaceActionPending || root.service.openUiPending) return "busy"
             if (root.service.loadingLatest) return "loading"
             if (root.service.attachmentBlocked)
                 return root.service.previewStatus === "error" ? "attachment-error" : "previewing"
@@ -1204,7 +1204,7 @@ Item {
                         prompt: AiState.draft(root.query)
                         busy: root.service && root.service.busy
                         stopping: root.service && root.service.stopping
-                        loading: root.service && (root.service.loadingLatest || root.service.workspaceActionPending)
+                        loading: root.service && (root.service.loadingLatest || root.service.workspaceActionPending || root.service.openUiPending)
                         enabled: !root.service || !root.service.workspaceTransitionPending
                         attachmentBlocked: !!root.service && typeof root.service.attachmentBlocked !== "undefined"
                             && root.service.attachmentBlocked

@@ -10,7 +10,7 @@ function answerComposition(blocks) {
     // Carry the source and placement together. Separate QML bindings can update
     // in different orders when replacing one answer with a different shape.
     var result = {blocks: blocks || [], kind: "", title: "", primary: [], controls: [], support: [], sources: []};
-    var priorities = ["calc", "compare", "form", "timeline", "diagram", "gallery", "chart", "market",
+    var priorities = ["openui", "calc", "compare", "form", "timeline", "diagram", "gallery", "chart", "market",
         "steps", "check", "predict", "table", "actions"];
     var count = blocks && typeof blocks.length === "number" ? blocks.length : 0;
     if (count > 64) return result; // Keep the legacy view, never silently drop a tail.

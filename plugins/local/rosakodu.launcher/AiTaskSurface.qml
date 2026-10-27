@@ -17,6 +17,8 @@ Column {
     required property color accent
     property var checkedState: ({})
     property var uiState: null
+    property int turnId: -1
+    property var openUiService: null
     property bool calcCanDuplicate: true
     property string calcDuplicateHint: ""
     property string mediaRoot: ""
@@ -57,6 +59,8 @@ Column {
         suppressedTitle: owner.suppressedTitle
         checkedState: owner.checkedState
         uiState: owner.uiState
+        turnId: owner.turnId
+        openUiService: owner.openUiService
         calcCanDuplicate: owner.calcCanDuplicate
         calcDuplicateHint: owner.calcDuplicateHint
         mediaRoot: owner.mediaRoot
