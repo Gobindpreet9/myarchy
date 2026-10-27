@@ -366,7 +366,7 @@
       "path": "plugins/local/rosakodu.launcher/ai_catalog.py",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/ai_catalog.py",
       "mode": "0644",
-      "sha256": "b2185df57f7cbb9dbc65a9eb4e717befc732461b6118227999a1e4de560a1924"
+      "sha256": "b7023b9daee4c93fe513ecd168969c9bbcf19ed95a7a1ce5109952ec6d5e8a29"
     },
     {
       "path": "plugins/local/rosakodu.launcher/ai_formula.py",

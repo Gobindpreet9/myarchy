@@ -408,7 +408,13 @@ def openui_instructions(agent=None):
         raise ValueError(OPENUI_PROMPT_ERROR) from None
     scope = (
         "\n\nOPTIONAL NATIVE OPENUI PROFILE. All previous native blocks, especially calc, remain valid. "
-        "For a useful custom interactive task you may instead include ONE openui block with exactly "
+        "For a useful custom interactive task, PREFER ONE openui block over static native presentation. "
+        "When the user asks to understand, explore, simulate, compare or configure a system with "
+        "multiple states, use OpenUI whenever a small interactive control (slider, input, segmented "
+        "control, step-through, toggle) would make the answer clearer. A static diagram, check or "
+        "checklist alone is not enough for those tasks; use one only when a fixed picture is genuinely "
+        "better. Simple facts, short definitions and validated numeric calculations stay native. "
+        "The openui block has exactly "
         "{type:\"openui\",title:string,code:string}. Title is at most 160 characters; code is a non-empty "
         "OpenUI DSL program of at most 32768 UTF-8 bytes. The usual six-block and 65536-byte answer "
         "limits still apply. This is the sole exception to the earlier ban on nested UI: inert DSL "
