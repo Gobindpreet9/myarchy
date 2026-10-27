@@ -324,7 +324,7 @@
       "path": "plugins/local/rosakodu.launcher/README.md",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/README.md",
       "mode": "0644",
-      "sha256": "0d7f34b6e3ad15637eb905d91bb2cb8179ab4327c057019ac7acf24d65d65735"
+      "sha256": "a973f681ba444f2992a5c392d7afe808d3f0983cdbbc89fee44f5e0165848cef"
     },
     {
       "path": "plugins/local/rosakodu.launcher/SatinGlass.js",

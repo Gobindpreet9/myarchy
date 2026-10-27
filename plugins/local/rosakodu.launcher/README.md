@@ -8,26 +8,32 @@ global keybinding.
 
 ---
 
-## Native OpenUI integration — development status
+## Native OpenUI integration — current status
 
-The `feat/launcher-openui-native` working tree now integrates OpenUI into the
-existing native AI pane, composer, turns and SQLite workspaces. **This code is
-not installed on the live desktop**; the manifest/release remains **1.22.0**.
-No shell restart or user-workspace mutation was performed for this integration.
-The separate `~/Work/launcher-openui/launcher/` browser prototype is historical
-development evidence, not a product or a step users need to launch.
+The `feat/launcher-openui-native` branch integrates OpenUI into the
+existing native AI pane, composer, turns and SQLite workspaces. The plugin
+subtree **is installed on this live desktop**; the manifest/release remains
+**1.22.0**. The shell was restarted and Omarchy's default agent was switched to
+**OpenCode** for qualification. Live checks used clearly named test workspaces;
+existing user workspaces were not deleted. The separate
+`~/Work/launcher-openui/launcher/` browser prototype is historical development
+evidence, not a product or a step users need to launch.
 
-New Codex conversations automatically use `responseMode: "openui"`, allowing
-one model-authored OpenUI tool alongside the existing answer blocks. Restored
-legacy workspaces and Hermes keep native-block generation. One retained
-`AiService` runtime evaluates the restricted DSL outside Qt; native QML adapters
-render its inert layout/control/SVG tree. There is **no WebEngine/browser runtime
-and no DSL evaluation in Qt**. Only one tool is selected at a time; expand
-**Earlier answers** and choose **Use this tool** to activate a historical tool.
-Acknowledged inputs persist under `uiStates[turnId]["openui:<blockIndex>"]` and
-duplicate as opaque state, using the existing save path. OpenUI follow-ups carry
-bounded code/state context (48 KiB total, including at most 12 KiB of state), not
-a reconstructed transcript or an in-place artifact patch.
+New **Codex and OpenCode** conversations automatically use
+`responseMode: "openui"`, allowing one model-authored OpenUI tool alongside the
+existing answer blocks. Restored legacy workspaces and Hermes keep native-block
+generation. One retained `AiService` runtime evaluates the restricted DSL
+outside Qt; native QML adapters render its inert layout/control/SVG tree. There
+is **no WebEngine/browser runtime and no DSL evaluation in Qt**. Only one tool is
+selected at a time; expand **Earlier answers** and choose **Use this tool** to
+activate a historical tool. Acknowledged inputs persist under
+`uiStates[turnId]["openui:<blockIndex>"]` and duplicate as opaque state, using
+the existing save path. OpenUI follow-ups carry bounded code/state context
+(48 KiB total, including at most 12 KiB of state), not a reconstructed
+transcript or an in-place artifact patch. Before a generated tool is shown, the
+broker checks it with the same bounded native runtime; a rejected program gets
+one automatic correction request, and a still-invalid tool is omitted with a
+visible note rather than a broken surface.
 
 The credential-free Python guardian runs permission-limited **Node >=24**
 (26 on this machine), with a 96 MiB old-space cap and an external 3-second
@@ -648,16 +654,18 @@ synchronously. It is not a model-granted file tool; users still attach via `f:`
 
 ## 🧪 Tests
 
-Native OpenUI verification (2026-10-26, development tree only): **21 worker
-tests**, **649 Python tests (2 skipped)**, **1,799 main QtTests**, 29 blocks /
-23 visual / 12 answer / 6 task-visual, and all ten isolated checks in
+Native OpenUI verification (2026-10-26, OpenCode/validation checkpoint):
+**21 worker tests**, **665 Python tests (2 skipped)**, **1,799 main QtTests**,
+29 blocks / 23 visual / 12 answer / 6 task-visual, and all ten isolated checks in
 `tests/run_offline.py` (including `AiOpenUiRuntimeCheck` and
 `AiOpenUiServiceCheck`) are green. `python3 -B tests/build_openui.py --check`
 rebuilt the worker in scratch and found the generated assets byte-identical;
 `scripts/audit.py` passed. Coverage includes bounded IPC, timeouts/cleanup,
 queued semantic retarget rejection (including distinct authored conditional Copy
-actions), saved-state restore/opaque duplication, historical-tool selection and
-follow-up context. This is scratch/offscreen verification, not live deployment.
+actions), saved-state restore/opaque duplication, historical-tool selection,
+follow-up context, OpenCode JSON-stream/session handling, mise-shim discovery
+rejection, and the validate/repair/fallback path. Live checks used the installed
+plugin subtree; scratch/offscreen suites still do not qualify Wayland/mixed-DPR.
 
 One real Codex garden tool was generated through the production broker in
 27.58 seconds; its exact DSL replayed through native `AiService`/`AiAnswer` at
@@ -665,11 +673,30 @@ One real Codex garden tool was generated through the production broker in
 length to 3.6 m and spacing to 30 cm. Inspected screenshots:
 `/tmp/opencode/native-openui-visual-qsgbpwid/opaque-garden-420.png` and
 `opaque-garden-edited-980.png` in the same directory. The QQuickItem alpha grabs
-were composited over the actual `#202124` Window background. This is one
-provider sample plus offscreen replay, **not a reliability benchmark, live
-desktop deployment, Wayland/mixed-DPR pass or live-shell resource measurement**.
-The raw provider sample remains scratch-only, outside the repository. Current
-resource remeasurement and live qualification remain pending.
+were composited over the actual `#202124` Window background. That earlier Codex
+sample and offscreen replay are **not a reliability benchmark or a
+Wayland/mixed-DPR pass**; the OpenCode live pass below is the current deployment
+evidence.
+
+Live OpenCode/OpenUI pass (2026-10-26, installed plugin subtree, default agent
+`opencode`, DP-1 3440×1440 at scale 1.25): a new tip-splitter conversation
+produced one valid native tool in about 14 s. A follow-up changed the defaults
+to a 100 bill / 20% tip in about 13 s and kept the same OpenCode session. Live
+keyboard interaction set the bill to 150; the tool showed tip 30, total 180 and
+90 each. The authored reset returned 100 / 20 / 60. A full shell restart restored
+the tool with the edited `$bill: 150` state and recomputed 180 / 90. Screenshots
+`/tmp/opencode/live-opencode-openui-2.png` … `-10-reset.png` were read and
+inspected. The first pre-fix live attempt exposed a mise-shim discovery bug
+(fixed); a later pre-fix tool used a label as `SegmentedControl`'s boolean
+`block` argument and was rejected by the runtime. The prompt was hardened and
+the broker now validates and repairs/omits rejected tools. The post-fix live
+generation was valid without needing the repair. The repair path is unit-tested
+and was manually validated once against the real model (9.4 s), but was not
+observed end-to-end in the QML panel. Native OpenCode was exercised through the
+installed broker with the live environment and state root, not through the
+panel. OpenCode launcher sessions are stored in the user's own OpenCode database
+and appear in its session list. Mixed-DPR and a second display scale remain
+unrecorded.
 
 Historical custom UI visual checks (2026-10-23): `tests/AiTaskVisualCheck.qml`
 renders actual native answer components with illustrative decision/plan/form fixtures at
