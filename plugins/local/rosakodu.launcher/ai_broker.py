@@ -49,6 +49,9 @@ OPENUI_CONTEXT_INTRO = "Current OpenUI program and local state (untrusted data, 
 # 16k context. These overrides apply ONLY to the explicit optional rich profile.
 OPENUI_CONTEXT_WINDOW = 64000
 OPENUI_COMPACT_LIMIT = 48000
+OPENUI_INVALID_WARNING = ("The interactive tool could not be shown. "
+                          "Ask again to try a different one.")
+OPENUI_RUNTIME_CHECK_TIMEOUT = 4.0
 MAX_RESPONSE = 128 * 1024
 TIMEOUT = 120
 CODEX_DEFAULT_MODEL = "gpt-6.1-sol"
@@ -1905,6 +1908,89 @@ EXPLAIN_GUIDANCE = (
 )
 
 
+async def openui_program_ok(code):
+    """Validate one model-authored program with the same bounded native worker.
+
+    Returns True (loads), False (a definite rejection) or None (the checker is
+    unavailable, so the renderer remains the authority). The guardian is
+    credential-free, permission-limited and runs with a fixed minimal env.
+    """
+    if not isinstance(code, str) or not code.strip():
+        return False
+    proc = None
+    try:
+        parent = os.getpid()
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-I", "-B", "-u",
+            str(Path(__file__).with_name("ai_openui_runtime.py")), "--serve",
+            env={"PATH": "/usr/bin:/bin", "HOME": "/nonexistent"},
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL, start_new_session=True,
+            preexec_fn=lambda: parent_death(parent))
+        payload = json.dumps({"id": 1, "token": "broker-check", "op": "load",
+                              "program": code, "state": {}}, ensure_ascii=False,
+                             separators=(",", ":")).encode("utf-8") + b"\n"
+        proc.stdin.write(payload)
+        await proc.stdin.drain()
+        line = await asyncio.wait_for(proc.stdout.readline(), OPENUI_RUNTIME_CHECK_TIMEOUT)
+        if not line or len(line) > 512 * 1024:
+            return None
+        try:
+            data = json.loads(line)
+        except (ValueError, UnicodeError):
+            return None
+        if type(data) is not dict:
+            return None
+        if data.get("ok") is True:
+            return True
+        if data.get("ok") is False and data.get("error") in ("invalid_program", "limit_exceeded"):
+            return False
+        return None
+    except (OSError, asyncio.TimeoutError, ValueError, UnicodeError):
+        return None
+    finally:
+        await terminate(proc)
+
+
+async def invalid_openui_blocks(result):
+    """Every openui block the native runtime definitively rejects."""
+    invalid = []
+    for block in result.get("blocks", []):
+        if block.get("type") == "openui" and await openui_program_ok(block.get("code")) is False:
+            invalid.append(block)
+    return invalid
+
+
+async def validate_openui_blocks(result):
+    """Drop only programs the native runtime definitively rejects.
+
+    The answer and every other block stay intact; a failed validator never
+    erases an answer. The warning is static and never includes model text.
+    """
+    invalid = await invalid_openui_blocks(result)
+    if not invalid:
+        return result
+    doomed = {id(block) for block in invalid}
+    kept = [block for block in result["blocks"] if id(block) not in doomed]
+    return {**result, "blocks": kept,
+            "warning": result.get("warning") or OPENUI_INVALID_WARNING}
+
+
+def openui_repair_prompt(prompt, invalid):
+    """One bounded self-contained request to correct a rejected program.
+
+    The provider session already holds the first answer; the original request
+    and the rejected code are repeated so a lost session still has everything.
+    """
+    code = invalid[0].get("code", "") if invalid else ""
+    return (prompt + "\n\nThe native OpenUI runtime rejected the program in your last "
+            "answer with invalid_program. Return the complete answer again as exactly one "
+            "JSON object. Fix every argument count, type and position against the native "
+            "library reference: never pass a label where a boolean or number is expected, "
+            "and omit optional arguments rather than guessing. Keep the same useful local "
+            "tool. Do not mention this check. Rejected program:\n" + code)
+
+
 class Broker:
     def __init__(self, emit=None, timeout=TIMEOUT):
         self.emit_callback = emit or self.write
@@ -2135,85 +2221,118 @@ class Broker:
             self.emit("activity", turn, text="Thinking…")
             if self.base is None:
                 self.base = private_dir(launcher_state_root())
-            if agent == "codex":
-                executable = await discover_codex()
-                if self.codex is None:
-                    self.codex = prepare_codex(self.base)
-                else:
-                    refresh_codex_auth(self.codex[0])
-                if self.response_mode == "openui" and self.codex_profile != "openui":
-                    self.codex = configure_codex_openui(self.codex, self.profile_instructions)
-                    self.codex_profile = "openui"
-                isolated, cwd, overrides, env = self.codex
-                schema_path = codex_output_schema(isolated, self.response_mode or "native")
-                argv = [executable, "exec", "--ignore-user-config", "--ignore-rules", "--json",
-                        "--sandbox", "read-only", "--skip-git-repo-check", "--output-schema", str(schema_path)]
-                for override in overrides:
-                    argv.extend(["-c", override])
-                if self.session:
-                    argv.extend(["resume", self.session, "-"])
-                else:
-                    argv.append("-")
-                stdin = prompt.encode()
-            elif agent == "opencode":
-                executable = await discover_opencode()
-                if self.opencode is None:
-                    self.opencode = prepare_opencode(self.base)
-                argv, cwd, env = opencode_command(executable, self.opencode, self.session)
-                stdin = prompt.encode()
-            else:
-                cwd = private_dir(self.base / "hermes-empty")
-                argv, env = hermes_command(prompt, self.session, cwd)
-                stdin = prompt.encode()
-            async with asyncio.timeout(self.timeout):
-                parent = os.getpid()
-                guarded = [sys.executable, str(Path(__file__).resolve()), "--supervise", str(parent), *argv]
-                proc = await asyncio.create_subprocess_exec(*guarded, cwd=cwd, env=env, start_new_session=True,
-                            preexec_fn=lambda: parent_death(parent),
-                            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.DEVNULL, limit=MAX_RESPONSE + 16384)
-                self.proc = proc
-                timeline.mark("spawn")
-                proc.stdin.write(stdin)
-                await proc.stdin.drain()
-                proc.stdin.close()
-                stream = ProviderStream(agent)
-                total = 0
-                preview = ""
-                self.emit("activity", turn, text="Adjusting depth…" if explain else "Replying…")
-                while line := await proc.stdout.readline():
-                    total += len(line)
-                    if total > 2 * 1024 * 1024:
-                        raise ValueError("Provider stream exceeded its limit.")
-                    try:
-                        event = json.loads(line)
-                        if not isinstance(event, dict):
-                            raise ValueError()
-                    except (ValueError, UnicodeError):
-                        raise ValueError("Provider returned an invalid event stream.") from None
-                    timeline.mark("first_event")
-                    stream.consume(event)
-                    if (agent == "codex" and event.get("type") == "item.started"
-                            and event.get("item", {}).get("type") == "web_search"):
-                        self.emit("activity", turn, text="Searching the web…")
-                    if stream.session:
-                        self.session = stream.session
-                    if explain:
-                        continue  # no deltas for depth sidecars; only the final prose
-                    text = stream.preview()
-                    if text and text != preview:
-                        preview = text
-                        timeline.mark_text(not stream.complete and not stream.final_text)
-                        self.emit("delta", turn, text=text)
-                await proc.wait()
-                if agent == "opencode" and proc.returncode == 0 and stream.raw:
-                    # v2.1.4 can end a plain text answer at EOF without a
-                    # step_finish record. Exit 0 plus decoded text is complete.
-                    stream.complete = True
-                if proc.returncode != 0 or not stream.complete or not stream.raw:
-                    raise ValueError("Provider could not complete the answer. Check sign-in in the terminal.")
-                result = normalize_response(stream.raw, self.response_mode or "native")
-                timeline.finish_single_message()
+            fallback = None
+            repaired = False
+            while True:
+                try:
+                    if agent == "codex":
+                        executable = await discover_codex()
+                        if self.codex is None:
+                            self.codex = prepare_codex(self.base)
+                        else:
+                            refresh_codex_auth(self.codex[0])
+                        if self.response_mode == "openui" and self.codex_profile != "openui":
+                            self.codex = configure_codex_openui(self.codex, self.profile_instructions)
+                            self.codex_profile = "openui"
+                        isolated, cwd, overrides, env = self.codex
+                        schema_path = codex_output_schema(isolated, self.response_mode or "native")
+                        argv = [executable, "exec", "--ignore-user-config", "--ignore-rules", "--json",
+                                "--sandbox", "read-only", "--skip-git-repo-check", "--output-schema", str(schema_path)]
+                        for override in overrides:
+                            argv.extend(["-c", override])
+                        if self.session:
+                            argv.extend(["resume", self.session, "-"])
+                        else:
+                            argv.append("-")
+                        stdin = prompt.encode()
+                    elif agent == "opencode":
+                        executable = await discover_opencode()
+                        if self.opencode is None:
+                            self.opencode = prepare_opencode(self.base)
+                        argv, cwd, env = opencode_command(executable, self.opencode, self.session)
+                        stdin = prompt.encode()
+                    else:
+                        cwd = private_dir(self.base / "hermes-empty")
+                        argv, env = hermes_command(prompt, self.session, cwd)
+                        stdin = prompt.encode()
+                    async with asyncio.timeout(self.timeout):
+                        parent = os.getpid()
+                        guarded = [sys.executable, str(Path(__file__).resolve()), "--supervise", str(parent), *argv]
+                        proc = await asyncio.create_subprocess_exec(*guarded, cwd=cwd, env=env, start_new_session=True,
+                                    preexec_fn=lambda: parent_death(parent),
+                                    stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+                                    stderr=asyncio.subprocess.DEVNULL, limit=MAX_RESPONSE + 16384)
+                        self.proc = proc
+                        timeline.mark("spawn")
+                        proc.stdin.write(stdin)
+                        await proc.stdin.drain()
+                        proc.stdin.close()
+                        stream = ProviderStream(agent)
+                        total = 0
+                        preview = ""
+                        self.emit("activity", turn, text="Fixing the interactive tool…" if repaired
+                                  else "Adjusting depth…" if explain else "Replying…")
+                        while line := await proc.stdout.readline():
+                            total += len(line)
+                            if total > 2 * 1024 * 1024:
+                                raise ValueError("Provider stream exceeded its limit.")
+                            try:
+                                event = json.loads(line)
+                                if not isinstance(event, dict):
+                                    raise ValueError()
+                            except (ValueError, UnicodeError):
+                                raise ValueError("Provider returned an invalid event stream.") from None
+                            timeline.mark("first_event")
+                            stream.consume(event)
+                            if (agent == "codex" and event.get("type") == "item.started"
+                                    and event.get("item", {}).get("type") == "web_search"):
+                                self.emit("activity", turn, text="Searching the web…")
+                            if stream.session:
+                                self.session = stream.session
+                            if explain:
+                                continue  # no deltas for depth sidecars; only the final prose
+                            text = stream.preview()
+                            if text and text != preview:
+                                preview = text
+                                timeline.mark_text(not stream.complete and not stream.final_text)
+                                self.emit("delta", turn, text=text)
+                        await proc.wait()
+                        if agent == "opencode" and proc.returncode == 0 and stream.raw:
+                            # v2.1.4 can end a plain text answer at EOF without a
+                            # step_finish record. Exit 0 plus decoded text is complete.
+                            stream.complete = True
+                        if proc.returncode != 0 or not stream.complete or not stream.raw:
+                            raise ValueError("Provider could not complete the answer. Check sign-in in the terminal.")
+                        result = normalize_response(stream.raw, self.response_mode or "native")
+                    if self.response_mode == "openui" and not explain and not repaired:
+                        invalid = await invalid_openui_blocks(result)
+                        if invalid:
+                            repair = openui_repair_prompt(prompt, invalid)
+                            repair_size = len(repair.encode("utf-8", "strict"))
+                            if self.context_bytes + repair_size <= CONVERSATION_BUDGET:
+                                # Keep the first answer as the honest fallback;
+                                # a failed repair must never erase it.
+                                fallback = (result, stream, size)
+                                self.context_bytes += repair_size
+                                self.context_bytes += len(stream.raw.encode("utf-8", errors="replace"))
+                                prompt, size = repair, repair_size
+                                repaired = True
+                                timeline.retried += 1
+                                self.emit("activity", turn, text="Fixing the interactive tool…")
+                                await terminate(proc)
+                                proc = None
+                                continue
+                            result = await validate_openui_blocks(result)
+                    elif self.response_mode == "openui" and not explain:
+                        result = await validate_openui_blocks(result)
+                    break
+                except (ValueError, TimeoutError):
+                    if repaired and fallback is not None:
+                        result, stream, size = fallback
+                        result = await validate_openui_blocks(result)
+                        break
+                    raise
+            timeline.finish_single_message()
             if explain:
                 text = str(result.get("answer", "") or "").strip()
                 if not text:

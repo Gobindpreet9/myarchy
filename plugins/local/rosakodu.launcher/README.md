@@ -189,7 +189,10 @@ Codex and OpenCode conversations author the native OpenUI tool profile; Hermes
 and restored legacy conversations use native answers. OpenCode answers run
 headlessly with the pinned `opencode-go/deepseek-v4.1-flash#high` model and an
 answer-only policy: no shell, file, browser or MCP tools, and no changes to your
-OpenCode configuration. The direct **New chat**
+OpenCode configuration. Before a generated tool is shown, the same bounded
+native runtime checks it; a rejected program gets one automatic correction
+request, and a still-invalid tool is omitted with a visible note instead of a
+broken surface. The direct **New chat**
 action in the answer toolbar clears the visible conversation, draft, attachment
 and checklist state; the finished conversation stays saved and searchable, and
 the next submission uses the current default. **Earlier answers**

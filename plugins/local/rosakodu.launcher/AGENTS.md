@@ -20,13 +20,27 @@ are disposable and use the same reaper pattern as Codex homes.
 `opencode`; new Codex and OpenCode chats default to `responseMode: "openui"`,
 while Hermes and restored legacy conversations stay native. No OpenCode handoff
 button yet; its sessions can be resumed with `opencode --session <id>`.
-Offline verification: **660 Python tests (2 skipped)**, 1,799 main QtTests,
+Discovery prefers `~/.local/bin/opencode` and the packaged CLI paths, and
+REFUSES a mise shim: a shim resolves through the user's mise config, which the
+provider's private HOME deliberately does not contain. That exact failure was
+found live (the shim emitted `mise ... not trusted` and exited before producing
+an event) and is now pinned by a discovery regression.
+Before a model-authored tool is emitted, the broker runs the same bounded
+`ai_openui_runtime.py` guardian against it. A definite rejection gets ONE
+self-contained correction request in the same provider session (still bounded
+by the 192 KiB conversation budget); a second rejection, a failed repair, or an
+unavailable validator falls back honestly: invalid `openui` blocks are omitted
+with a static warning and the rest of the answer is kept. The validator never
+runs model text as code outside that guardian and never adds provider tools.
+Offline verification: **665 Python tests (2 skipped)**, 1,799 main QtTests,
 AiOpenUiServiceCheck's new OpenCode-mode phase and AiServiceCheck green, audit
 passing. Direct integration probes (real OpenCode, scratch homes, real auth DB)
-produced one validated native answer in 18.4 s and one validated native OpenUI
-tool in 9.1 s. Those are single samples, not provider-quality or reliability
-benchmarks. Live install, restart, default-agent switch and live OpenUI prompts
-were still pending at this checkpoint.
+produced one validated native answer in 18.4 s. Three post-prompt-hardening
+OpenUI samples: one valid tool, one schema-dropped answer, one runtime-rejected
+tool; a manual repair request corrected that rejected tool in 9.4 s. These are
+small samples, not provider-quality or reliability benchmarks. Live install,
+restart, default-agent switch and live OpenUI prompts were still pending at this
+checkpoint.
 
 Native OpenUI integration (2026-10-25; live-installed checkpoint `5788367`, then
 this working tree):

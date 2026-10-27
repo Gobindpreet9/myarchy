@@ -18,7 +18,7 @@ import time
 import types
 import unicodedata
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ai_broker as b
@@ -2681,6 +2681,86 @@ class OpenCodeProviderTests(unittest.IsolatedAsyncioTestCase):
         prompt = self.run_record(0)["prompt"]
         self.assertIn("OPTIONAL NATIVE OPENUI PROFILE", prompt)
         self.assertIn("bounded answer shape above", prompt)
+
+    async def test_rejected_openui_program_is_retried_once_and_repaired(self):
+        tool = json.dumps({"answer": "A local tool", "blocks": [
+            {"type": "openui", "title": "Broken", "code": "root = Nope()"}],
+            "suggestions": []})
+        fixed = json.dumps({"answer": "A local tool", "blocks": [
+            {"type": "openui", "title": "Fixed", "code": "root = Text(\"ok\")"}],
+            "suggestions": []})
+        self.fake.write_text(
+            "#!" + sys.executable + "\n"
+            "import sys,json\n"
+            "data=sys.stdin.read()\n"
+            "with open(%r,'a',encoding='utf-8') as f:\n"
+            "    f.write(json.dumps({'argv':sys.argv[1:],'prompt':data})+'\\n')\n"
+            "text = %r if 'Rejected program:' in data else %r\n"
+            "session = 'ses_open5'\n"
+            "for event in ({'type':'step_start','sessionID':session},\n"
+            "              {'type':'text','sessionID':session,'part':{'text':text}}):\n"
+            "    print(json.dumps(event),flush=True)\n"
+            % (str(self.capture), fixed, tool))
+        self.fake.chmod(0o755)
+
+        async def check(code):
+            return "Nope" not in code
+
+        with patch.object(b, "discover_opencode", self.locate), \
+             patch.object(b, "openui_program_ok", check):
+            await self.submit(responseMode="openui")
+        done = self.events[-1]
+        self.assertEqual(done["type"], "done")
+        self.assertEqual([(block["type"], block.get("title")) for block in done["blocks"]],
+                         [("openui", "Fixed")])
+        runs = [json.loads(line) for line in self.capture.read_text().splitlines()]
+        self.assertEqual(len(runs), 2)
+        self.assertIn("Rejected program:\nroot = Nope()", runs[1]["prompt"])
+        self.assertEqual(runs[1]["argv"][runs[1]["argv"].index("--session") + 1], "ses_open5")
+        self.assertEqual(done["timing"]["retried"], 1)
+
+    async def test_failed_repair_keeps_the_first_answer_without_the_broken_tool(self):
+        tool = json.dumps({"answer": "A local tool", "blocks": [
+            {"type": "text", "title": "Try this", "text": "Try this."},
+            {"type": "openui", "title": "Broken", "code": "root = Nope()"}],
+            "suggestions": []})
+        self.fake.write_text(
+            "#!" + sys.executable + "\n"
+            "import sys,json\n"
+            "data=sys.stdin.read()\n"
+            "if 'Rejected program:' in data: sys.exit(2)\n"
+            "session='ses_open6'\n"
+            "for event in ({'type':'step_start','sessionID':session},\n"
+            "              {'type':'text','sessionID':session,'part':{'text':" + repr(tool) + "}}):\n"
+            "    print(json.dumps(event),flush=True)\n")
+        self.fake.chmod(0o755)
+
+        async def check(code):
+            return False
+
+        with patch.object(b, "discover_opencode", self.locate), \
+             patch.object(b, "openui_program_ok", check):
+            await self.submit(responseMode="openui")
+        done = self.events[-1]
+        self.assertEqual(done["type"], "done", "a failed optional repair must not fail the turn")
+        self.assertEqual([block["type"] for block in done["blocks"]], ["text"])
+        self.assertEqual(done["warning"], b.OPENUI_INVALID_WARNING)
+        self.assertNotIn("error", [event["type"] for event in self.events])
+
+    async def test_rejected_openui_program_is_dropped_before_done(self):
+        tool = json.dumps({"answer": "A local tool", "blocks": [
+            {"type": "text", "title": "Try this", "text": "Try this."},
+            {"type": "openui", "title": "Broken", "code": "root = Nope()"}],
+            "suggestions": []})
+        self.script([{"type": "step_start", "sessionID": "ses_open4"},
+                     {"type": "text", "sessionID": "ses_open4", "part": {"text": tool}}])
+        with patch.object(b, "discover_opencode", self.locate), \
+             patch.object(b, "openui_program_ok", AsyncMock(return_value=False)):
+            await self.submit(responseMode="openui")
+        done = self.events[-1]
+        self.assertEqual(done["type"], "done")
+        self.assertEqual([block["type"] for block in done["blocks"]], ["text"])
+        self.assertEqual(done["warning"], b.OPENUI_INVALID_WARNING)
 
     async def test_tool_and_provider_errors_are_static(self):
         cases = [

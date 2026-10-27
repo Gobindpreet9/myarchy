@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ai_broker as broker
@@ -93,6 +93,33 @@ class OpenUiProfileTests(unittest.TestCase):
                 path = broker.codex_output_schema(scratch, mode)
                 self.assertEqual(json.loads(path.read_text()), catalog.answer_schema(mode))
                 self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+
+class OpenUiRuntimeGateTests(unittest.IsolatedAsyncioTestCase):
+    async def test_validator_accepts_a_real_program_and_rejects_a_bad_argument_type(self):
+        good = '$n = 2\nroot = Col([Input($n, "Amount", "number"), Text($n * 3)])'
+        bad = '$n = 2\nroot = Col([SegmentedControl($n, ["1", "2"], "label")])'
+        self.assertTrue(await broker.openui_program_ok(good))
+        self.assertFalse(await broker.openui_program_ok(bad))
+        self.assertFalse(await broker.openui_program_ok(""))
+        self.assertFalse(await broker.openui_program_ok(None))
+
+    async def test_gate_drops_only_a_definitively_rejected_program(self):
+        answer = {"answer": "A tool", "blocks": [
+            {"type": "text", "text": "Try this."},
+            {"type": "openui", "title": "Broken", "code": "root = Nope()"}],
+            "suggestions": [], "warning": ""}
+        with patch.object(broker, "openui_program_ok", AsyncMock(return_value=False)):
+            rejected = await broker.validate_openui_blocks(answer)
+        self.assertEqual([block["type"] for block in rejected["blocks"]], ["text"])
+        self.assertEqual(rejected["warning"], broker.OPENUI_INVALID_WARNING)
+        self.assertEqual(answer["blocks"][1]["type"], "openui", "the original answer is not mutated")
+        with patch.object(broker, "openui_program_ok", AsyncMock(return_value=None)):
+            unknown = await broker.validate_openui_blocks(answer)
+        self.assertEqual(len(unknown["blocks"]), 2, "an unavailable validator is not a rejection")
+        with patch.object(broker, "openui_program_ok", AsyncMock(return_value=True)):
+            accepted = await broker.validate_openui_blocks(answer)
+        self.assertEqual(accepted, answer)
 
 
 class OpenUiCommandTests(unittest.IsolatedAsyncioTestCase):
