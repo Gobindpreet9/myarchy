@@ -1173,7 +1173,10 @@ async def discover_opencode(probe_timeout=None):
     """Locate and audit the installed OpenCode CLI without running its service.
 
     `--version` is a global flag, so probing never boots the desktop service.
-    A hung or unlaunchable candidate only skips itself.
+    A hung or unlaunchable candidate only skips itself. Mise shims are skipped
+    on purpose: they resolve through the user's mise configuration, which the
+    provider's private HOME deliberately does not contain, so an accepted shim
+    would fail only after a real submit.
     """
     limit = PROBE_TIMEOUT if probe_timeout is None else probe_timeout
 
@@ -1188,12 +1191,21 @@ async def discover_opencode(probe_timeout=None):
         finally:
             await terminate(proc)
 
+    def shim(path):
+        try:
+            resolved = Path(path).resolve(strict=True)
+        except (OSError, RuntimeError):
+            return False
+        return resolved.name == "mise" or "mise/shims" in Path(path).parts
+
     home = Path.home()
-    candidates = [shutil.which("opencode"), str(home / ".local/bin/opencode"),
+    # The user's launcher wrapper is the intended install and never depends on
+    # the private HOME. PATH is checked next, then the packaged CLI locations.
+    candidates = [str(home / ".local/bin/opencode"), shutil.which("opencode"),
                   *OPENCODE_FALLBACK_PATHS]
     usable = False
     for candidate in dict.fromkeys(c for c in candidates if c):
-        if not Path(candidate).is_absolute() or not os.access(candidate, os.X_OK):
+        if not Path(candidate).is_absolute() or not os.access(candidate, os.X_OK) or shim(candidate):
             continue
         usable = True
         try:

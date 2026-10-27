@@ -360,7 +360,7 @@
       "path": "plugins/local/rosakodu.launcher/ai_broker.py",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/ai_broker.py",
       "mode": "0644",
-      "sha256": "2b9b5edac5237e3f221fd68ca2d837e31cd8863eb7205f1aae326a10720b717e"
+      "sha256": "03b7870b3f34c6a1fc3854108896b73df3bb15fd7437b18c64374b7e3c2d15a8"
     },
     {
       "path": "plugins/local/rosakodu.launcher/ai_catalog.py",
@@ -462,7 +462,7 @@
       "path": "plugins/local/rosakodu.launcher/tests/test_ai_broker.py",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/tests/test_ai_broker.py",
       "mode": "0644",
-      "sha256": "9710177e19cd43882f947e2885fbe8d5fdc2699b8f075edb783fa502451d5fd2"
+      "sha256": "03e361fbfbce873e93d483eaed3e49759d45f906cc708e68d426f21f39f3e60d"
     },
     {
       "path": "plugins/local/rosakodu.launcher/tests/test_ai_catalog.py",

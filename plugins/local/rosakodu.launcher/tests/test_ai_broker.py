@@ -2564,13 +2564,31 @@ class OpenCodePrepareTests(unittest.TestCase):
                  patch.dict(os.environ, {"PATH": str(bin_dir)}):
                 with self.assertRaisesRegex(ValueError, "audited version 2.1.4"):
                     asyncio.run(b.discover_opencode())
+            # A mise shim is never accepted, even when it answers for the real
+            # tool with the user's environment; the private HOME cannot run it.
+            mise = bin_dir / "mise"
+            mise.write_text("#!/bin/sh\necho 'opencode v2.1.4'\n")
+            mise.chmod(0o755)
+            fake.unlink()
+            fake.symlink_to(mise)
+            wrapper = root / ".local/bin/opencode"
+            wrapper.parent.mkdir(parents=True)
+            wrapper.write_text("#!/bin/sh\necho 'opencode v2.1.4'\n")
+            wrapper.chmod(0o755)
+            with patch.object(b.Path, "home", return_value=root), \
+                 patch.object(b, "OPENCODE_FALLBACK_PATHS", ()), \
+                 patch.dict(os.environ, {"PATH": str(bin_dir)}):
+                self.assertEqual(asyncio.run(b.discover_opencode()), str(wrapper))
+            wrapper.unlink()
+            # A hung PATH candidate skips to a real fallback location.
+            fake.unlink()
             fake.write_text("#!/bin/sh\nexec sleep 30\n")
-            fallback = root / ".local/bin/opencode"
-            fallback.parent.mkdir(parents=True)
+            fallback = root / "fallback/opencode"
+            fallback.parent.mkdir()
             fallback.write_text("#!/bin/sh\necho 'opencode v2.1.4'\n")
             fallback.chmod(0o755)
             with patch.object(b.Path, "home", return_value=root), \
-                 patch.object(b, "OPENCODE_FALLBACK_PATHS", ()), \
+                 patch.object(b, "OPENCODE_FALLBACK_PATHS", (str(fallback),)), \
                  patch.dict(os.environ, {"PATH": str(bin_dir)}):
                 started = time.monotonic()
                 self.assertEqual(asyncio.run(b.discover_opencode(probe_timeout=0.4)), str(fallback))
