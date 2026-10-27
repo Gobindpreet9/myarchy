@@ -144,7 +144,7 @@
       "path": "plugins/local/rosakodu.launcher/AGENTS.md",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/AGENTS.md",
       "mode": "0644",
-      "sha256": "c26bd6993b089ad4d703c39f5355f12e2dc7da6708cb9112739b6523fe087fcf"
+      "sha256": "4b9c7f2b61bd1bee1b167e6a98c4978ddd44331050e90a7c70745f5afa0e271f"
     },
     {
       "path": "plugins/local/rosakodu.launcher/AI_WORKSPACE_PLAN.md",

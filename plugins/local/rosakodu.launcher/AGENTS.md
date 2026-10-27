@@ -1,6 +1,6 @@
 # rosakodu.launcher agent notes
 
-OpenCode provider (2026-10-26, **working tree; live install pending**):
+OpenCode provider (2026-10-26, **live-installed plugin subtree; shell restarted**):
 `ai_broker.py` discovers audited OpenCode **2.1.4** and runs
 `opencode run --standalone --format json --agent launcher --model
 opencode-go/deepseek-v4.1-flash#high`, with the prompt on stdin (never process
@@ -38,19 +38,40 @@ passing. Direct integration probes (real OpenCode, scratch homes, real auth DB)
 produced one validated native answer in 18.4 s. Three post-prompt-hardening
 OpenUI samples: one valid tool, one schema-dropped answer, one runtime-rejected
 tool; a manual repair request corrected that rejected tool in 9.4 s. These are
-small samples, not provider-quality or reliability benchmarks. Live install,
-restart, default-agent switch and live OpenUI prompts were still pending at this
-checkpoint.
+small samples, not provider-quality or reliability benchmarks.
 
-Native OpenUI integration (2026-10-25; live-installed checkpoint `5788367`, then
-this working tree):
+Live qualification (2026-10-26, plugin subtree installed from the working tree,
+187/187 manifest entries hash/mode-identical, `omarchy restart shell`, default
+agent set to `opencode`): a new tip-splitter conversation produced ONE valid
+OpenUI tool in about 14 s; a follow-up changed the defaults to a 100 bill / 20%
+tip in about 13 s and kept the same OpenCode session. Live keyboard interaction
+then set the bill to 150 and showed correct local results (tip 30, total 180,
+each person 90); the authored reset returned 100 / 20 / 60. A full shell restart
+restored the tool with `uiStates{"3":{"openui:0":{"$bill":150,...}}}`, 150 in
+the input and the recomputed 180/90 row after tabbing it into view. Screenshots
+`/tmp/opencode/live-opencode-openui-2.png` … `-10-reset.png` were read and
+inspected. The first pre-fix live attempt exposed the mise-shim discovery bug;
+a later pre-fix tool (SegmentedControl label passed as its boolean `block`
+argument) was runtime-invalid and showed the old error surface. After the
+discovery fix and the prompt-hardening/validation slice, the live generation
+above was valid without needing the automatic repair. The repair path is
+unit-tested (success, second rejection, failed repair fallback) and was
+manually validated once against the real model; it was not observed end-to-end
+in the QML panel. Native OpenCode was exercised through the installed broker
+with the live environment and state root, not through the panel. Only DP-1
+3440×1440 at scale 1.25 is active, so mixed-DPR and a second display scale
+remain unrecorded. OpenCode launcher sessions are written to the user's own
+OpenCode database and appear in its session list.
+
+Native OpenUI integration (2026-10-25; live-installed checkpoint `5788367`, now
+extended by the installed OpenCode/validation slice):
 new Codex conversations automatically select `responseMode: "openui"`; restored
 legacy workspaces default to `native`, and Hermes stays native. The existing
 composer, turns, artifacts and SQLite store retain ownership. Manifest/release
-stays **1.22.0**. Checkpoint `5788367` is the live-installed native integration
-(byte-identical plugin subtree); this OpenCode working tree is not installed
-yet. Do not install into the live plugin, restart the shell or touch user
-workspaces without separate approval.
+stays **1.22.0**. New Codex AND OpenCode conversations now select OpenUI;
+checkpoint `5788367` was the first live-installed native integration, and the
+current OpenCode/validation slice is installed too. Do not install into the live
+plugin, restart the shell or touch user workspaces without separate approval.
 
 `AiService.qml` owns ONE retained `AiOpenUiRuntime.qml`, not one per answer
 Loader. Native `AiOpenUiSurface`/`View`/`Node`/`Svg` adapters present a bounded
@@ -87,9 +108,10 @@ Reproducibility: `python3 -B tests/build_openui.py --check` uses scratch
 `--write` updates generated assets. Keep `openui/` source, lockfile, upstream
 provenance and complete MIT notices together. `python3 -B tests/run_offline.py`
 isolates every check, including native runtime/service/store checks. Final
-scratch pass (2026-10-26): **21 worker tests**, **649 Python tests (2 skipped)**,
-**1,799 main QtTests**, 29 blocks / 23 visual / 12 answer / 6 task-visual,
-all ten isolated checks, byte-identical generated assets and a passing audit.
+scratch pass (2026-10-26, OpenCode/validation checkpoint): **21 worker tests**,
+**665 Python tests (2 skipped)**, **1,799 main QtTests**, 29 blocks / 23 visual /
+12 answer / 6 task-visual, all ten isolated checks, byte-identical generated
+assets and a passing audit.
 The action-handle regression pins distinct authored conditional Copy actions at
 one structural path while preserving same-action Copy across ordinary edits.
 One production-broker
