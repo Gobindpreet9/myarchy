@@ -248,7 +248,9 @@ Item {
                 x: host.kind === "Badge" ? 8 : 0
                 y: host.kind === "Badge" ? 4 : 0
                 width: Math.max(0, parent.width - x * 2)
-                text: host.kind === "Icon" ? Native.glyph(host.p.name || host.p.icon) : Native.text(host.p.text)
+                text: host.kind === "Icon" ? Native.glyph(host.p.name || host.p.icon)
+                    : (host.kind === "Badge" && Native.glyph(host.p.icon)
+                        ? Native.glyph(host.p.icon) + "  " + Native.text(host.p.text) : Native.text(host.p.text))
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 maximumLineCount: Math.max(1, Native.number(host.p.maxLines, 100000))
@@ -262,7 +264,8 @@ Item {
                 font.strikeout: host.p.lineThrough === true
                 lineHeight: 1.25
                 Accessible.role: host.kind === "Title" ? Accessible.Heading : Accessible.StaticText
-                Accessible.name: host.kind === "Icon" ? Native.text(host.p.name || host.p.icon) : text
+                Accessible.name: host.kind === "Icon" ? Native.text(host.p.name || host.p.icon)
+                    : host.kind === "Badge" ? Native.text(host.p.text) : text
             }
         }
     }
@@ -276,7 +279,8 @@ Item {
             implicitHeight: host.p.size === "lg" ? 42 : host.p.size === "sm" ? 30 : 34
             enabled: host.interactive
             hoverEnabled: true
-            text: host.kind === "IconButton" ? Native.glyph(host.p.icon) : (host.p.icon ? Native.glyph(host.p.icon) + "  " : "") + Native.text(host.p.label)
+            text: host.kind === "IconButton" ? Native.glyph(host.p.icon)
+                : (Native.glyph(host.p.icon) ? Native.glyph(host.p.icon) + "  " : "") + Native.text(host.p.label)
             Accessible.name: Native.text(host.p.label || host.p.icon)
             onClicked: host.emitEvent("click", null)
             Keys.onReturnPressed: event => { if (enabled && !event.isAutoRepeat) clicked(); event.accepted = true; }
@@ -588,7 +592,7 @@ Item {
             id: choicesField
             width: host.width
             property real preferredWidth: 240
-            spacing: host.p.label ? 6 : 0
+            spacing: host.p.label ? 7 : 0
             function sync() {
                 var choices = Native.options(host.p.options).map(function(option, i) { return { id: option.value + ":" + i, props: option }; });
                 Native.reconcile(choiceModel, choices);
@@ -602,8 +606,9 @@ Item {
                 text: Native.text(host.p.label)
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
-                color: host.theme.foreground
+                color: Native.alpha(host.theme.foreground, 0.88)
                 font.pixelSize: 13
+                font.weight: Font.Medium
                 Accessible.name: text
             }
             Flow {
@@ -618,14 +623,25 @@ Item {
                         required property string nodeSpec
                         required property int index
                         readonly property var option: JSON.parse(nodeSpec).props
-                        readonly property bool list: host.kind === "RadioGroup" && host.p.variant !== "pills"
+                        // A RadioGroup defaults to a vertical list. "pills" and a
+                        // SegmentedControl are visibly bounded choices; otherwise
+                        // unselected controls looked like plain sentences.
+                        readonly property bool list: host.kind === "RadioGroup" && host.p.variant !== "pills" && host.p.variant !== "cards"
+                        readonly property bool grouped: host.kind === "SegmentedControl"
+                        readonly property bool cards: host.kind === "RadioGroup" && host.p.variant === "cards"
+                        readonly property bool fill: list || cards || host.p.block === true
                         objectName: "openuiChoice:" + host.nodeId + ":" + index
-                        width: list || host.p.block === true ? parent.width / (list ? 1 : Math.max(1, choiceModel.count)) - (list ? 0 : 6) : Math.min(parent.width, implicitWidth)
-                        implicitWidth: optionText.implicitWidth + 24
-                        implicitHeight: Math.max(34, optionText.implicitHeight + 16)
+                        width: fill ? (cards || list ? parent.width : parent.width / Math.max(1, choiceModel.count) - 6) : Math.min(parent.width, implicitWidth)
+                        implicitWidth: Math.min(parent ? parent.width : 240, optionText.implicitWidth + (list ? 24 : 26))
+                        implicitHeight: Math.max(list ? 30 : 34, optionText.implicitHeight + (list ? 6 : 14))
+                        hoverEnabled: true
                         enabled: host.interactive
                         checked: Native.text(host.p.value) === option.value
                         autoExclusive: false
+                        leftPadding: list ? 2 : 12
+                        rightPadding: list ? 2 : 12
+                        topPadding: list ? 3 : 7
+                        bottomPadding: list ? 3 : 7
                         Accessible.name: option.label
                         Accessible.description: option.description
                         onClicked: host.emitEvent("change", option.value)
@@ -634,18 +650,23 @@ Item {
                         indicator: null
                         contentItem: Text {
                             id: optionText
-                            text: (choice.list ? choice.checked ? "●  " : "○  " : "") + choice.option.label + (choice.option.description ? "\n" + choice.option.description : "")
+                            text: (choice.list ? choice.checked ? "●  " : "○  " : "") + choice.option.label
+                                + (choice.option.description ? "\n" + choice.option.description : "")
                             textFormat: Text.PlainText
                             wrapMode: Text.Wrap
                             color: choice.checked ? host.theme.accent : host.theme.foreground
                             font.pixelSize: 13
+                            font.weight: choice.checked ? Font.Medium : Font.Normal
                             verticalAlignment: Text.AlignVCenter
                         }
                         background: Rectangle {
-                            radius: 7
-                            color: choice.checked ? Native.alpha(host.theme.accent, 0.12) : "transparent"
-                            border.width: choice.visualFocus || choice.checked || host.p.variant === "cards" ? 1 : 0
-                            border.color: Native.alpha(host.theme.accent, choice.visualFocus ? 0.9 : 0.35)
+                            radius: choice.list ? 6 : choice.cards ? 9 : 999
+                            color: choice.checked ? Native.alpha(host.theme.accent, 0.14)
+                                : choice.list ? (choice.hovered ? Native.alpha(host.theme.foreground, 0.045) : "transparent")
+                                : Native.alpha(host.theme.foreground, choice.hovered ? 0.075 : 0.035)
+                            border.width: choice.visualFocus ? 2 : choice.list ? (choice.checked ? 1 : 0) : 1
+                            border.color: Native.alpha(choice.checked || choice.visualFocus ? host.theme.accent : host.theme.foreground,
+                                choice.visualFocus ? 0.9 : choice.checked ? 0.55 : 0.16)
                         }
                     }
                 }

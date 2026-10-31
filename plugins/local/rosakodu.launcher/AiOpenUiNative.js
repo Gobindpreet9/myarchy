@@ -133,11 +133,18 @@ function shapePath(kind, p) {
 function filled(kind, p) { return ["Circle", "Ellipse", "Rect", "Polygon"].indexOf(kind) >= 0 || kind === "Path" && p.fill !== undefined; }
 function fill(kind, p, theme) { return p.fill !== undefined ? color(p.fill, theme, "transparent") : filled(kind, p) && p.stroke === undefined ? theme.foreground : "transparent"; }
 function stroke(kind, p, theme) { return p.stroke !== undefined ? color(p.stroke, theme, "transparent") : filled(kind, p) ? "transparent" : theme.foreground; }
-// Small local glyph vocabulary; unavailable lucide names are visibly labelled,
-// never treated as image paths, URLs, font markup or QML source.
+// Small local glyph vocabulary. Names are never treated as image paths, URLs,
+// font markup or QML source. Unknown names are omitted rather than leaking a
+// raw "[lucide-name]" into the interface; Accessible.name keeps the meaning.
 function glyph(name) {
-    var glyphs = { plus: "+", minus: "−", check: "✓", x: "×", "chevron-left": "‹", "chevron-right": "›", "chevron-down": "⌄",
-        "arrow-left": "←", "arrow-right": "→", "arrow-up": "↑", "arrow-down": "↓", info: "ⓘ", "circle-help": "?", "help-circle": "?",
-        "rotate-ccw": "↶", "rotate-cw": "↷", play: "▷", pause: "Ⅱ", clock: "◷", sun: "☼", heart: "♡", star: "☆", settings: "⚙" };
-    return glyphs[name] || "[" + text(name) + "]";
+    var glyphs = { plus: "+", minus: "−", check: "✓", x: "×", "chevron-left": "‹", "chevron-right": "›",
+        "chevron-up": "⌃", "chevron-down": "⌄", "arrow-left": "←", "arrow-right": "→", "arrow-up": "↑",
+        "arrow-down": "↓", info: "ⓘ", "circle-help": "?", "help-circle": "?", "rotate-ccw": "↶",
+        "rotate-cw": "↷", refresh: "↻", play: "▷", pause: "Ⅱ", clock: "◷", calendar: "▦", sun: "☼",
+        heart: "♡", star: "☆", sparkles: "✦", settings: "⚙", zap: "⚡", copy: "⧉", check_circle: "✓",
+        "circle-check": "✓", "circle-check-big": "✓", circle: "○", map: "⌖", "map-pin": "⌖",
+        activity: "∿", gauge: "◔", wallet: "▭", "trending-up": "↗", "trending-down": "↘",
+        search: "⌕", trash: "⌫", download: "⇩", upload: "⇧", external_link: "↗",
+        "external-link": "↗", lock: "⌑", home: "⌂", menu: "≡" };
+    return glyphs[text(name).trim().toLowerCase()] || "";
 }

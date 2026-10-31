@@ -157,6 +157,52 @@ Item {
             mouseClick(findChild(surface, "openuiChoice:radio:1"));
             compare(events.signalArguments[4][2], "second");
         }
+        function test_choiceSurfacesLookInteractiveBeforeSelection() {
+            mount([
+                n("segments", "SegmentedControl", { value: "a", options: ["a", "b", "c"] }),
+                n("pills", "RadioGroup", { label: "Pick one", value: "x", options: ["x", "y"], variant: "pills" }),
+                n("list", "RadioGroup", { label: "Plain list", value: "m", options: ["m", "n"], variant: "list" })
+            ]);
+            for (var id of ["segments", "pills", "list"]) {
+                var count = id === "segments" ? 3 : 2;
+                for (var index = 0; index < count; ++index) {
+                    var option = findChild(surface, "openuiChoice:" + id + ":" + index);
+                    verify(option !== null, id + " option " + index);
+                    verify(option.width > 0 && option.height >= 30);
+                    var background = option.background;
+                    verify(background !== null);
+                    if (id === "list") {
+                        compare(background.border.width, option.checked ? 1 : 0,
+                                "a list row stays quiet until it is chosen");
+                    } else {
+                        verify(background.border.width >= 1,
+                               "every unselected " + id + " option needs a visible boundary");
+                        verify(background.color.a >= 0.02,
+                               "every unselected " + id + " option needs a visible surface");
+                    }
+                }
+            }
+            var second = findChild(surface, "openuiChoice:pills:1");
+            second.forceActiveFocus(Qt.TabFocusReason);
+            tryVerify(function() { return second.background.border.width === 2; });
+            verify(second.background.color.a >= 0.02);
+            verify(findChild(surface, "openuiChoice:segments:0").width < 421);
+        }
+
+        function test_iconsNeverLeakTheirInternalName() {
+            mount([
+                n("badge", "Badge", { text: "Done", color: "success", icon: "check" }),
+                n("reply", "Icon", { name: "a-lucide-name-the-launcher-does-not-render" })
+            ]);
+            var badgeText = findChild(surface, "openuiNode:badge").presentation.children[1];
+            verify(badgeText.text.indexOf("Done") >= 0);
+            verify(badgeText.text.indexOf("]") < 0);
+            compare(badgeText.Accessible.name, "Done", "decorative glyphs stay out of the spoken label");
+            var iconText = findChild(surface, "openuiNode:reply").presentation.children[1];
+            compare(iconText.text, "");
+            compare(iconText.Accessible.name, "a-lucide-name-the-launcher-does-not-render");
+        }
+
         function test_selectKeyboard() {
             mount([n("select", "Select", { label: "Choice", value: "a", options: ["a", { value: "b", label: "Bee" }] })]);
             var select = control("select");

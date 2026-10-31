@@ -39,7 +39,13 @@ OpenCode's OpenUI profile gets a **240-second per-attempt** deadline (the
 automatic repair attempt gets the same fresh budget); Codex, Hermes and native
 OpenCode answers retain the 120-second timeout. The emitted timeout message
 reports the effective deadline instead of hard-coding 120.
-Offline verification: **666 Python tests (2 skipped)**, 1,800 main QtTests,
+OpenUI choice controls are visibly interactive at rest: SegmentedControl and
+RadioGroup `pills`/`cards` draw a surface and boundary on every option, the
+selected pill gets an accent fill and the focused one a 2px ring; the plain
+RadioGroup `list` stays quiet until chosen. Badge icons use the local glyph
+vocabulary, and unknown icon names are omitted from text while `Accessible.name`
+keeps the authored meaning (never a raw `[lucide-name]`).
+Offline verification: **666 Python tests (2 skipped)**, 1,802 main QtTests,
 AiOpenUiServiceCheck's new OpenCode-mode phase and AiServiceCheck green, audit
 passing. Direct integration probes (real OpenCode, scratch homes, real auth DB)
 produced one validated native answer in 18.4 s. Three post-prompt-hardening
@@ -69,6 +75,17 @@ with the live environment and state root, not through the panel. Only DP-1
 3440×1440 at scale 1.25 is active, so mixed-DPR and a second display scale
 remain unrecorded. OpenCode launcher sessions are written to the user's own
 OpenCode database and appear in its session list.
+
+Automatic intent selection was live-checked on 2026-10-30 with OpenCode 2.2.3.
+The natural question "Explain how a bicycle gear ratio affects speed and
+pedalling effort." produced one valid OpenUI tool plus one supporting text
+block in about 49 s, with no request to "build a tool"; the tool opened
+automatically and framed presets, sliders, stats and a quick check. The simple
+fact "What is nmap?" stayed native with zero blocks in about 4.9 s. This is two
+prompts, not a benchmark. The live gear tool at 820px was inspected before and
+after the choice-control polish; offscreen renders at 420/620/820px were also
+read and inspected (`/tmp/opencode/gear-live-window.png`,
+`/tmp/opencode/gear-offscreen-{420,620,820}-after.png`).
 
 Native OpenUI integration (2026-10-25; live-installed checkpoint `5788367`, now
 extended by the installed OpenCode/validation slice):
@@ -116,7 +133,7 @@ Reproducibility: `python3 -B tests/build_openui.py --check` uses scratch
 provenance and complete MIT notices together. `python3 -B tests/run_offline.py`
 isolates every check, including native runtime/service/store checks. Final
 scratch pass (2026-10-26, OpenCode/validation checkpoint): **21 worker tests**,
-**666 Python tests (2 skipped)**, **1,800 main QtTests**, 29 blocks / 23 visual /
+**666 Python tests (2 skipped)**, **1,802 main QtTests**, 29 blocks / 23 visual /
 12 answer / 6 task-visual, all ten isolated checks, byte-identical generated
 assets and a passing audit.
 The action-handle regression pins distinct authored conditional Copy actions at
