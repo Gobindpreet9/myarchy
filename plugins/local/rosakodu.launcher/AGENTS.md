@@ -47,8 +47,12 @@ RadioGroup `pills`/`cards` draw a surface and boundary on every option, the
 selected pill gets an accent fill and the focused one a 2px ring; the plain
 RadioGroup `list` stays quiet until chosen. Badge icons use the local glyph
 vocabulary, and unknown icon names are omitted from text while `Accessible.name`
-keeps the authored meaning (never a raw `[lucide-name]`).
-Offline verification: **668 Python tests (2 skipped)**, 1,802 main QtTests,
+keeps the authored meaning (never a raw `[lucide-name]`). `Badge` tones are
+semantic foreground colours: a `neutral`/default badge uses 86% foreground text
+over a 12% tinted pill. Do not reuse the `neutral` surface token (foreground at
+6%) for badge text — that made newly added dynamic badges look blank even though
+the runtime tree and geometry were correct.
+Offline verification: **668 Python tests (2 skipped)**, 1,803 main QtTests,
 AiOpenUiServiceCheck's new OpenCode-mode phase and AiServiceCheck green, audit
 passing. Direct integration probes (real OpenCode, scratch homes, real auth DB)
 produced one validated native answer in 18.4 s. Three post-prompt-hardening
@@ -136,7 +140,7 @@ Reproducibility: `python3 -B tests/build_openui.py --check` uses scratch
 provenance and complete MIT notices together. `python3 -B tests/run_offline.py`
 isolates every check, including native runtime/service/store checks. Final
 scratch pass (2026-10-26, OpenCode/validation checkpoint): **21 worker tests**,
-**668 Python tests (2 skipped)**, **1,802 main QtTests**, 29 blocks / 23 visual /
+**668 Python tests (2 skipped)**, **1,803 main QtTests**, 29 blocks / 23 visual /
 12 answer / 6 task-visual, all ten isolated checks, byte-identical generated
 assets and a passing audit.
 The action-handle regression pins distinct authored conditional Copy actions at

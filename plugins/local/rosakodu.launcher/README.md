@@ -659,7 +659,7 @@ synchronously. It is not a model-granted file tool; users still attach via `f:`
 ## 🧪 Tests
 
 Native OpenUI verification (2026-10-26, OpenCode/validation checkpoint):
-**21 worker tests**, **668 Python tests (2 skipped)**, **1,802 main QtTests**,
+**21 worker tests**, **668 Python tests (2 skipped)**, **1,803 main QtTests**,
 29 blocks / 23 visual / 12 answer / 6 task-visual, and all ten isolated checks in
 `tests/run_offline.py` (including `AiOpenUiRuntimeCheck` and
 `AiOpenUiServiceCheck`) are green. `python3 -B tests/build_openui.py --check`

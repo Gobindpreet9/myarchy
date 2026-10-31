@@ -189,6 +189,26 @@ Item {
             verify(findChild(surface, "openuiChoice:segments:0").width < 421);
         }
 
+        function test_neutralBadgeTextStaysReadable() {
+            mount([
+                n("neutral", "Badge", { text: "3 pairs measured", color: "neutral" }),
+                n("defaulted", "Badge", { text: "opposite" }),
+                n("info", "Badge", { text: "Shared state", color: "info" }),
+                n("success", "Badge", { text: "Correct", color: "success" })
+            ]);
+            for (var id of ["neutral", "defaulted", "info", "success"]) {
+                var badge = findChild(surface, "openuiNode:" + id);
+                var render = badge.presentation;
+                verify(render !== null, id);
+                verify(render.children[1].color.a >= 0.84,
+                       id + " badge text must not reuse the 6% neutral surface alpha");
+                verify(render.children[0].color.a > 0.06,
+                       id + " badge needs a visible tinted pill");
+                verify(badge.width > badge.presentation.children[1].implicitWidth,
+                       id + " pill must leave horizontal padding around its label");
+            }
+        }
+
         function test_iconsNeverLeakTheirInternalName() {
             mount([
                 n("badge", "Badge", { text: "Done", color: "success", icon: "check" }),

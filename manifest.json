@@ -144,7 +144,7 @@
       "path": "plugins/local/rosakodu.launcher/AGENTS.md",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/AGENTS.md",
       "mode": "0644",
-      "sha256": "da80acfdbdde5ea821900eeb2699f3d4c03f730f0ffbabf9ee7d70d7bbda4490"
+      "sha256": "3e384deddb6d63c9ebe21d29c03c10d4d811a7892c658050489a5ca56f631622"
     },
     {
       "path": "plugins/local/rosakodu.launcher/AI_WORKSPACE_PLAN.md",
@@ -324,7 +324,7 @@
       "path": "plugins/local/rosakodu.launcher/README.md",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/README.md",
       "mode": "0644",
-      "sha256": "4fd5b550902b56c66687c8806b9706ab11bdbf1a860d8b9eb716ab8e7510f82e"
+      "sha256": "7f3061ed8c98461b856cfcf0a0994b9ec90c67948f01fde30f7bb2819d289a02"
     },
     {
       "path": "plugins/local/rosakodu.launcher/SatinGlass.js",
@@ -954,7 +954,7 @@
       "path": "plugins/local/rosakodu.launcher/AiOpenUiNode.qml",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/AiOpenUiNode.qml",
       "mode": "0644",
-      "sha256": "7f5f0b0e73f7f6395d86739b42c0018ee9045496453c65fa81636179e7beb8eb"
+      "sha256": "eba75a8a65711239d4398124a772781a787608d795af2ba4105b90d9bd3ad90e"
     },
     {
       "path": "plugins/local/rosakodu.launcher/AiOpenUiRuntime.qml",
@@ -1248,7 +1248,7 @@
       "path": "plugins/local/rosakodu.launcher/tests/openui/tst_AiOpenUi.qml",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/tests/openui/tst_AiOpenUi.qml",
       "mode": "0644",
-      "sha256": "d48adbe9015701e966bc35970c6d69ef8856e929ef69c17df0680f4cd353b6ac"
+      "sha256": "803faf715c0d8b801fbd07f8068330996934df7f132726ac7d51824e18e92024"
     },
     {
       "path": "plugins/local/rosakodu.launcher/tests/test_ai_openui_runtime.py",

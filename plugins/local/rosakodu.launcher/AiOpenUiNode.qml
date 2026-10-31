@@ -234,6 +234,13 @@ Item {
     Component {
         id: textComponent
         Item {
+            // `neutral` is a surface token in the palette (foreground at 6%),
+            // which made a neutral badge's own text nearly transparent. Badge
+            // tones are semantic foreground colours; only their background is
+            // tinted down.
+            readonly property color tone: host.kind === "Badge" && (!host.p.color || host.p.color === "neutral")
+                ? Native.alpha(host.theme.foreground, 0.86)
+                : Native.color(host.p.color, host.theme, host.theme.foreground)
             implicitWidth: copy.implicitWidth + (host.kind === "Badge" ? 16 : 0)
             implicitHeight: copy.implicitHeight + (host.kind === "Badge" ? 8 : 0)
             height: implicitHeight
@@ -241,7 +248,7 @@ Item {
                 anchors.fill: parent
                 visible: host.kind === "Badge"
                 radius: 6
-                color: Native.alpha(Native.color(host.p.color, host.theme, host.theme.foreground), 0.12)
+                color: Native.alpha(tone, 0.12)
             }
             Text {
                 id: copy
@@ -255,7 +262,8 @@ Item {
                 wrapMode: Text.Wrap
                 maximumLineCount: Math.max(1, Native.number(host.p.maxLines, 100000))
                 elide: host.p.maxLines > 0 ? Text.ElideRight : Text.ElideNone
-                color: Native.color(host.p.color, host.theme, host.kind === "Caption" ? Native.alpha(host.theme.foreground, 0.80) : host.theme.foreground)
+                color: host.kind === "Badge" ? parent.tone
+                    : Native.color(host.p.color, host.theme, host.kind === "Caption" ? Native.alpha(host.theme.foreground, 0.80) : host.theme.foreground)
                 font.pixelSize: host.kind === "Title" ? ({ sm: 15, md: 17, lg: 20, xl: 24, "2xl": 29, "3xl": 36 }[host.p.size || "md"] || 17)
                     : host.kind === "Icon" ? ({ sm: 14, md: 18, lg: 24, xl: 32 }[host.p.size || "md"] || 18)
                     : host.kind === "Caption" ? 12 : host.kind === "Badge" || host.kind === "Label" ? 13 : ({ xs: 12, sm: 13, md: 14, lg: 17 }[host.p.size || "md"] || 14)
