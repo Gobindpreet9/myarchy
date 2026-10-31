@@ -6,6 +6,20 @@ function number(value, fallback) {
     return typeof value === "number" && isFinite(value) ? value : fallback;
 }
 function text(value) { return value === null || value === undefined ? "" : String(value); }
+// Keep slider values human-readable: binary floating noise must not become
+// 0.30000000000000004 in a label, and currency units belong before the number.
+function numberText(value) {
+    if (typeof value !== "number" || !isFinite(value)) return "";
+    if (value === 0) return "0";
+    var clean = Number(value.toFixed(6));
+    if (Math.abs(clean) >= 1e15 || Math.abs(clean) < 1e-6) return clean.toExponential(4);
+    return String(clean);
+}
+function quantity(value, unit) {
+    var number = numberText(value), suffix = text(unit);
+    return ["$", "€", "£", "¥", "₹", "₽", "₩"].indexOf(suffix) >= 0
+        ? suffix + number : number + suffix;
+}
 function space(value, fallback) { return Math.max(0, number(value, fallback / 4)) * 4; }
 function alpha(color, opacity) { return Qt.rgba(color.r, color.g, color.b, opacity * color.a); }
 function literalColor(value) {

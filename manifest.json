@@ -144,7 +144,7 @@
       "path": "plugins/local/rosakodu.launcher/AGENTS.md",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/AGENTS.md",
       "mode": "0644",
-      "sha256": "3e384deddb6d63c9ebe21d29c03c10d4d811a7892c658050489a5ca56f631622"
+      "sha256": "1ea4a213dc442722fbc18c76a0c1c08b54f453c262f42a9b894530182046dd56"
     },
     {
       "path": "plugins/local/rosakodu.launcher/AI_WORKSPACE_PLAN.md",
@@ -324,7 +324,7 @@
       "path": "plugins/local/rosakodu.launcher/README.md",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/README.md",
       "mode": "0644",
-      "sha256": "7f3061ed8c98461b856cfcf0a0994b9ec90c67948f01fde30f7bb2819d289a02"
+      "sha256": "c620db7b612f07fff3548af5699bdfe3b112208933143b3cc7d881d0f793360b"
     },
     {
       "path": "plugins/local/rosakodu.launcher/SatinGlass.js",
@@ -948,13 +948,13 @@
       "path": "plugins/local/rosakodu.launcher/AiOpenUiNative.js",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/AiOpenUiNative.js",
       "mode": "0644",
-      "sha256": "50f0c853b05372e22b9a0005f1e2d8d433d617ed411e06668878c3f95deba89e"
+      "sha256": "ca2eb6dff9f9d10722846966d3a5b70a87846ad963212bb64d25114ccec7b495"
     },
     {
       "path": "plugins/local/rosakodu.launcher/AiOpenUiNode.qml",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/AiOpenUiNode.qml",
       "mode": "0644",
-      "sha256": "eba75a8a65711239d4398124a772781a787608d795af2ba4105b90d9bd3ad90e"
+      "sha256": "8b82b322cd513d3966e92670df348df87645c511405dff9edd882d47ecd48207"
     },
     {
       "path": "plugins/local/rosakodu.launcher/AiOpenUiRuntime.qml",
@@ -1248,7 +1248,7 @@
       "path": "plugins/local/rosakodu.launcher/tests/openui/tst_AiOpenUi.qml",
       "restore_to": ".config/omarchy/plugins/rosakodu.launcher/tests/openui/tst_AiOpenUi.qml",
       "mode": "0644",
-      "sha256": "803faf715c0d8b801fbd07f8068330996934df7f132726ac7d51824e18e92024"
+      "sha256": "79a01cc6befa4790699d8396d3c0bc23373ec0db49b7c80689dbd57e334e220f"
     },
     {
       "path": "plugins/local/rosakodu.launcher/tests/test_ai_openui_runtime.py",

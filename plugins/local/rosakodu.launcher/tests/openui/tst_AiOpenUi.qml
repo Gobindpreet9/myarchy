@@ -223,6 +223,29 @@ Item {
             compare(iconText.Accessible.name, "a-lucide-name-the-launcher-does-not-render");
         }
 
+        function test_sliderMarksFollowTheirValuesAndValuesReadCleanly() {
+            mount([
+                n("budget", "Slider", { label: "Budget", unit: "$", value: 1200, min: 0, max: 2400, step: 100,
+                    marks: [{ value: 0, label: "Low" }, { value: 1200, label: "Mid" }, { value: 2400, label: "High" }] }),
+                n("ratio", "Slider", { label: "Ratio", value: 0.30000000000000004, min: 0, max: 1, step: 0.05 })
+            ]);
+            tryVerify(function() { return findChild(surface, "openuiMark:budget:1") !== null; });
+            wait(20);
+            var budgetText = findChild(surface, "openuiNode:budget").presentation.children[0].text;
+            verify(budgetText.indexOf("$1200") >= 0, budgetText);
+            compare(findChild(surface, "openuiNode:ratio").presentation.children[0].text,
+                    "Ratio  ·  0.3", "binary floating noise must not leak into the label");
+            var low = findChild(surface, "openuiMark:budget:0");
+            var mid = findChild(surface, "openuiMark:budget:1");
+            var high = findChild(surface, "openuiMark:budget:2");
+            verify(low !== null && mid !== null && high !== null);
+            verify(Math.abs(low.x) < 0.5, "the 0% mark starts at the track");
+            verify(Math.abs(mid.x - (mid.parent.width - mid.width) / 2) < 1.5,
+                   "the midpoint mark sits at 50%, not in a left-aligned flow");
+            verify(Math.abs(high.x - (high.parent.width - high.width)) < 1.5,
+                   "the 100% mark ends at the track");
+        }
+
         function test_selectKeyboard() {
             mount([n("select", "Select", { label: "Choice", value: "a", options: ["a", { value: "b", label: "Bee" }] })]);
             var select = control("select");

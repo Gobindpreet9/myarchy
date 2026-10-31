@@ -432,14 +432,15 @@ Item {
             property real preferredWidth: 200
             spacing: 4
             Text {
+                readonly property string valueText: Native.quantity(range.value, host.p.unit)
                 visible: !!host.p.label || !!host.p.unit
                 width: parent.width
-                text: Native.text(host.p.label) + (host.p.label ? "  ·  " : "") + Native.text(range.value) + Native.text(host.p.unit)
+                text: Native.text(host.p.label) + (host.p.label ? "  ·  " : "") + valueText
                 textFormat: Text.PlainText
                 wrapMode: Text.Wrap
                 color: host.theme.foreground
                 font.pixelSize: 13
-                Accessible.name: text
+                Accessible.name: Native.text(host.p.label) ? Native.text(host.p.label) + ", " + valueText : valueText
             }
             Slider {
                 id: range
@@ -471,17 +472,29 @@ Item {
                     border.color: host.theme.foreground
                 }
             }
-            Flow {
+            Item {
+                id: markLabels
+                readonly property var marks: host.p.marks || []
                 width: parent.width
-                spacing: 12
+                implicitHeight: marks.length > 0 ? 16 : 0
+                visible: marks.length > 0
                 Repeater {
-                    model: host.p.marks || []
+                    model: markLabels.marks
                     delegate: Text {
                         required property var modelData
+                        required property int index
+                        readonly property real fraction: Math.max(0, Math.min(1,
+                            (Native.number(modelData.value, range.from) - range.from) / (range.to - range.from)))
+                        objectName: "openuiMark:" + host.nodeId + ":" + index
+                        x: (markLabels.width - width) * fraction
+                        width: implicitWidth
+                        height: markLabels.implicitHeight
                         text: Native.text(modelData.label)
                         textFormat: Text.PlainText
-                        font.pixelSize: 12
                         color: Native.alpha(host.theme.foreground, 0.80)
+                        font.pixelSize: 12
+                        horizontalAlignment: fraction <= 0 ? Text.AlignLeft
+                            : fraction >= 1 ? Text.AlignRight : Text.AlignHCenter
                     }
                 }
             }
