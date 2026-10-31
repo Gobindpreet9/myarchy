@@ -54,6 +54,11 @@ OPENUI_INVALID_WARNING = ("The interactive tool could not be shown. "
 OPENUI_RUNTIME_CHECK_TIMEOUT = 4.0
 MAX_RESPONSE = 128 * 1024
 TIMEOUT = 120
+# Generating a complete interactive program can legitimately take longer than
+# a native answer. OpenCode's OpenUI profile gets a wider PER-ATTEMPT deadline;
+# the automatic repair attempt gets the same fresh budget. Codex, Hermes and
+# native OpenCode answers keep the ordinary timeout.
+OPENCODE_OPENUI_TIMEOUT = 240
 CODEX_DEFAULT_MODEL = "gpt-6.1-sol"
 DISABLED_FEATURES = (
     "shell_tool", "unified_exec", "shell_snapshot", "shell_snapshot_v2",
@@ -1113,7 +1118,7 @@ def clean_env():
 
 
 AUDITED_CODEX_VERSION = "0.160.0"
-AUDITED_OPENCODE_VERSION = "2.1.4"
+AUDITED_OPENCODE_VERSION = "2.2.3"
 # One audited OpenCode model. The provider variant keeps the answer JSON stable
 # enough for the launcher's strict validator; the catalogue still travels in the
 # request (like Hermes), not in OpenCode's merged user configuration.
@@ -1763,7 +1768,7 @@ class ProviderStream:
             elif kind in ("error", "turn.failed"):
                 raise ValueError("Codex could not complete the answer. Check authentication in the terminal.")
         elif self.agent == "opencode":
-            # Pinned to `opencode run --format json` v2.1.4. `text` parts are
+            # Pinned to `opencode run --format json` v2.2.3. `text` parts are
             # complete blocks and a plain text answer may end at EOF without a
             # step_finish. Tool events are rejected, never surfaced.
             session = event.get("sessionID")
@@ -1992,9 +1997,10 @@ def openui_repair_prompt(prompt, invalid):
 
 
 class Broker:
-    def __init__(self, emit=None, timeout=TIMEOUT):
+    def __init__(self, emit=None, timeout=TIMEOUT, opencode_openui_timeout=OPENCODE_OPENUI_TIMEOUT):
         self.emit_callback = emit or self.write
         self.timeout = timeout
+        self.opencode_openui_timeout = opencode_openui_timeout
         self.task = None
         self.proc = None
         self.agent = None
@@ -2223,6 +2229,7 @@ class Broker:
                 self.base = private_dir(launcher_state_root())
             fallback = None
             repaired = False
+            attempt_timeout = self.timeout
             while True:
                 try:
                     if agent == "codex":
@@ -2255,7 +2262,10 @@ class Broker:
                         cwd = private_dir(self.base / "hermes-empty")
                         argv, env = hermes_command(prompt, self.session, cwd)
                         stdin = prompt.encode()
-                    async with asyncio.timeout(self.timeout):
+                    attempt_timeout = (self.opencode_openui_timeout
+                        if agent == "opencode" and self.response_mode == "openui" and not explain
+                        else self.timeout)
+                    async with asyncio.timeout(attempt_timeout):
                         parent = os.getpid()
                         guarded = [sys.executable, str(Path(__file__).resolve()), "--supervise", str(parent), *argv]
                         proc = await asyncio.create_subprocess_exec(*guarded, cwd=cwd, env=env, start_new_session=True,
@@ -2298,7 +2308,7 @@ class Broker:
                                 self.emit("delta", turn, text=text)
                         await proc.wait()
                         if agent == "opencode" and proc.returncode == 0 and stream.raw:
-                            # v2.1.4 can end a plain text answer at EOF without a
+                            # v2.2.3 can end a plain text answer at EOF without a
                             # step_finish record. Exit 0 plus decoded text is complete.
                             stream.complete = True
                         if proc.returncode != 0 or not stream.complete or not stream.raw:
@@ -2363,7 +2373,7 @@ class Broker:
         except asyncio.CancelledError:
             raise
         except TimeoutError:
-            self.emit("error", turn, message="Provider timed out after 120 seconds.")
+            self.emit("error", turn, message="Provider timed out after " + format(attempt_timeout, "g") + " seconds.")
             self.record_turn(timeline, agent, size, stream, "timeout", explain)
         except ValueError as exc:
             # A persisted session hint can go stale (provider cleaned it up).

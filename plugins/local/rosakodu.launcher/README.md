@@ -195,7 +195,10 @@ Codex and OpenCode conversations author the native OpenUI tool profile; Hermes
 and restored legacy conversations use native answers. OpenCode answers run
 headlessly with the pinned `opencode-go/deepseek-v4.1-flash#high` model and an
 answer-only policy: no shell, file, browser or MCP tools, and no changes to your
-OpenCode configuration. Before a generated tool is shown, the same bounded
+OpenCode configuration. The installed OpenCode build must be the audited
+**2.2.3** release; OpenUI generation gets a 240-second per-attempt deadline,
+while ordinary native answers keep the 120-second deadline. Before a generated
+tool is shown, the same bounded
 native runtime checks it; a rejected program gets one automatic correction
 request, and a still-invalid tool is omitted with a visible note instead of a
 broken surface. The direct **New chat**
@@ -655,7 +658,7 @@ synchronously. It is not a model-granted file tool; users still attach via `f:`
 ## 🧪 Tests
 
 Native OpenUI verification (2026-10-26, OpenCode/validation checkpoint):
-**21 worker tests**, **665 Python tests (2 skipped)**, **1,799 main QtTests**,
+**21 worker tests**, **666 Python tests (2 skipped)**, **1,800 main QtTests**,
 29 blocks / 23 visual / 12 answer / 6 task-visual, and all ten isolated checks in
 `tests/run_offline.py` (including `AiOpenUiRuntimeCheck` and
 `AiOpenUiServiceCheck`) are green. `python3 -B tests/build_openui.py --check`

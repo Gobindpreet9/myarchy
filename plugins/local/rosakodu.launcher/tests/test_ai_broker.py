@@ -2552,7 +2552,7 @@ class OpenCodePrepareTests(unittest.TestCase):
             bin_dir = root / "bin"
             bin_dir.mkdir()
             fake = bin_dir / "opencode"
-            fake.write_text("#!/bin/sh\necho 'opencode v2.1.4'\n")
+            fake.write_text("#!/bin/sh\necho 'opencode v2.2.3'\n")
             fake.chmod(0o755)
             with patch.object(b.Path, "home", return_value=root), \
                  patch.object(b, "OPENCODE_FALLBACK_PATHS", ()), \
@@ -2562,18 +2562,18 @@ class OpenCodePrepareTests(unittest.TestCase):
             with patch.object(b.Path, "home", return_value=root), \
                  patch.object(b, "OPENCODE_FALLBACK_PATHS", ()), \
                  patch.dict(os.environ, {"PATH": str(bin_dir)}):
-                with self.assertRaisesRegex(ValueError, "audited version 2.1.4"):
+                with self.assertRaisesRegex(ValueError, "audited version 2.2.3"):
                     asyncio.run(b.discover_opencode())
             # A mise shim is never accepted, even when it answers for the real
             # tool with the user's environment; the private HOME cannot run it.
             mise = bin_dir / "mise"
-            mise.write_text("#!/bin/sh\necho 'opencode v2.1.4'\n")
+            mise.write_text("#!/bin/sh\necho 'opencode v2.2.3'\n")
             mise.chmod(0o755)
             fake.unlink()
             fake.symlink_to(mise)
             wrapper = root / ".local/bin/opencode"
             wrapper.parent.mkdir(parents=True)
-            wrapper.write_text("#!/bin/sh\necho 'opencode v2.1.4'\n")
+            wrapper.write_text("#!/bin/sh\necho 'opencode v2.2.3'\n")
             wrapper.chmod(0o755)
             with patch.object(b.Path, "home", return_value=root), \
                  patch.object(b, "OPENCODE_FALLBACK_PATHS", ()), \
@@ -2585,7 +2585,7 @@ class OpenCodePrepareTests(unittest.TestCase):
             fake.write_text("#!/bin/sh\nexec sleep 30\n")
             fallback = root / "fallback/opencode"
             fallback.parent.mkdir()
-            fallback.write_text("#!/bin/sh\necho 'opencode v2.1.4'\n")
+            fallback.write_text("#!/bin/sh\necho 'opencode v2.2.3'\n")
             fallback.chmod(0o755)
             with patch.object(b.Path, "home", return_value=root), \
                  patch.object(b, "OPENCODE_FALLBACK_PATHS", (str(fallback),)), \
@@ -2681,6 +2681,33 @@ class OpenCodeProviderTests(unittest.IsolatedAsyncioTestCase):
         prompt = self.run_record(0)["prompt"]
         self.assertIn("OPTIONAL NATIVE OPENUI PROFILE", prompt)
         self.assertIn("bounded answer shape above", prompt)
+
+    async def test_openui_gets_the_wider_per_attempt_deadline_and_native_stays_short(self):
+        self.fake.write_text(
+            "#!" + sys.executable + "\n"
+            "import sys,json,time\n"
+            "sys.stdin.read()\n"
+            "time.sleep(0.35)\n"
+            "events=" + repr([{"type": "step_start", "sessionID": "ses_deadline"},
+                {"type": "text", "sessionID": "ses_deadline", "part": {"text": ANSWER}},
+                {"type": "step_finish", "sessionID": "ses_deadline",
+                 "part": {"reason": "stop", "tokens": {}}}]) + "\n"
+            "for event in events: print(json.dumps(event),flush=True)\n")
+        self.fake.chmod(0o755)
+        self.broker.timeout = 0.1
+        self.broker.opencode_openui_timeout = 2
+        with patch.object(b, "discover_opencode", self.locate):
+            await self.submit(responseMode="openui")
+        self.assertEqual(self.events[-1]["type"], "done",
+                         "a slow OpenUI generation must not inherit the native deadline")
+        self.broker.response_mode = None
+        self.broker.agent = None
+        self.broker.session = None
+        self.events.clear()
+        with patch.object(b, "discover_opencode", self.locate):
+            await self.submit(turnId=2)
+        self.assertEqual(self.events[-1]["type"], "error")
+        self.assertEqual(self.events[-1]["message"], "Provider timed out after 0.1 seconds.")
 
     async def test_rejected_openui_program_is_retried_once_and_repaired(self):
         tool = json.dumps({"answer": "A local tool", "blocks": [

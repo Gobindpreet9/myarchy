@@ -1,16 +1,19 @@
 # rosakodu.launcher agent notes
 
-OpenCode provider (2026-10-26, **live-installed plugin subtree; shell restarted**):
-`ai_broker.py` discovers audited OpenCode **2.1.4** and runs
+OpenCode provider (2026-10-30, **live-installed plugin subtree; shell restarted**):
+`ai_broker.py` discovers audited OpenCode **2.2.3** and runs
 `opencode run --standalone --format json --agent launcher --model
 opencode-go/deepseek-v4.1-flash#high`, with the prompt on stdin (never process
 argv) and `--session` on follow-ups. `prepare_opencode` builds a private
 HOME/XDG tree whose OpenCode config contains a deny-all answer-only agent; it
 shares ONLY the user's real `~/.local/share/opencode/opencode.db` via
 `OPENCODE_DB`, so OAuth refresh tokens are never duplicated. Launcher sessions
-therefore appear in the user's OpenCode session list. The answer catalogue
+therefore appear in the user's OpenCode session list. Version 2.2.3 was
+live-probed for both the native and OpenUI JSON profiles after the packaged
+desktop updated from 2.1.4; the event schema and config shape were unchanged.
+The answer catalogue
 travels in each request (Hermes-style compact signature); the config carries
-only the short answer-only policy. The v2.1.4 JSON stream is pinned:
+only the short answer-only policy. The v2.2.3 JSON stream is pinned:
 `step_start`/`text`/`reasoning`/`step_finish` are accepted, `text` parts are
 complete blocks joined by a blank line, tool/unknown events fail closed, and
 provider errors map to a static message. A text-only answer may end at EOF
@@ -32,7 +35,11 @@ by the 192 KiB conversation budget); a second rejection, a failed repair, or an
 unavailable validator falls back honestly: invalid `openui` blocks are omitted
 with a static warning and the rest of the answer is kept. The validator never
 runs model text as code outside that guardian and never adds provider tools.
-Offline verification: **665 Python tests (2 skipped)**, 1,799 main QtTests,
+OpenCode's OpenUI profile gets a **240-second per-attempt** deadline (the
+automatic repair attempt gets the same fresh budget); Codex, Hermes and native
+OpenCode answers retain the 120-second timeout. The emitted timeout message
+reports the effective deadline instead of hard-coding 120.
+Offline verification: **666 Python tests (2 skipped)**, 1,800 main QtTests,
 AiOpenUiServiceCheck's new OpenCode-mode phase and AiServiceCheck green, audit
 passing. Direct integration probes (real OpenCode, scratch homes, real auth DB)
 produced one validated native answer in 18.4 s. Three post-prompt-hardening
@@ -109,7 +116,7 @@ Reproducibility: `python3 -B tests/build_openui.py --check` uses scratch
 provenance and complete MIT notices together. `python3 -B tests/run_offline.py`
 isolates every check, including native runtime/service/store checks. Final
 scratch pass (2026-10-26, OpenCode/validation checkpoint): **21 worker tests**,
-**665 Python tests (2 skipped)**, **1,799 main QtTests**, 29 blocks / 23 visual /
+**666 Python tests (2 skipped)**, **1,800 main QtTests**, 29 blocks / 23 visual /
 12 answer / 6 task-visual, all ten isolated checks, byte-identical generated
 assets and a passing audit.
 The action-handle regression pins distinct authored conditional Copy actions at

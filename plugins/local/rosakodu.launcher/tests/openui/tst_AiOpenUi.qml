@@ -203,6 +203,43 @@ Item {
             verify(findChild(surface, "openuiNode:card3") === last);
             verify(last.parent.x < first.parent.x);
         }
+        // Regression: an event acknowledgement can add the first child of a
+        // container that measured zero height on the previous frame. Badges
+        // were observed in the runtime tree while their nested row stayed
+        // invisible. This pins the real View/AiOpenUiNode layout chain.
+        function test_emptyContainerGrowsWhenAFrameAddsItsFirstChild() {
+            surface.tree = n("root", "Col", {}, [
+                n("root/0", "Text", { text: "Before" }),
+                n("root/1", "Card", {}, [n("root/1/0", "Row", {}, [])]),
+                n("root/2", "Text", { text: "After" })
+            ]);
+            tryVerify(function() { return surface.implicitHeight > 0; });
+            wait(20);
+            var row = findChild(surface, "openuiNode:root/1/0");
+            verify(row !== null);
+            var group = row.presentation;
+            var initialHeight = surface.implicitHeight;
+            compare(group.measuredHeight, 0);
+            surface.tree = n("root", "Col", {}, [
+                n("root/0", "Text", { text: "Before" }),
+                n("root/1", "Card", {}, [n("root/1/0", "Row", {}, [
+                    n("root/1/0/0", "Badge", { text: "opposite" })
+                ])]),
+                n("root/2", "Text", { text: "After" })
+            ]);
+            var badge = null;
+            tryVerify(function() {
+                badge = findChild(surface, "openuiNode:root/1/0/0");
+                return badge !== null && badge.presentation !== null;
+            });
+            tryVerify(function() { return badge.implicitWidth > 0 && badge.implicitHeight > 0; });
+            tryVerify(function() { return group.measuredHeight > 0; }, 2000,
+                      "the previously empty row must measure its newly loaded badge");
+            tryVerify(function() { return surface.implicitHeight > initialHeight; }, 2000,
+                      "the new child must grow every ancestor, not remain clipped at zero height");
+            verify(findChild(surface, "openuiNode:root/1/0") === row,
+                   "an ordinary frame retains the existing container");
+        }
         function test_pressableKeyboardAndNestedControl() {
             mount([n("tile", "Pressable", { selected: true }, [n("tileText", "Text", { text: "Tile" }), n("nested", "Button", { label: "Nested" })])]);
             var tile = findChild(surface, "openuiNode:tile").presentation;
