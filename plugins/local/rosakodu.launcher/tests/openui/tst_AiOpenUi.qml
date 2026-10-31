@@ -212,12 +212,17 @@ Item {
         function test_iconsNeverLeakTheirInternalName() {
             mount([
                 n("badge", "Badge", { text: "Done", color: "success", icon: "check" }),
+                n("calendar", "Badge", { text: "12 months", icon: "calendar-days" }),
                 n("reply", "Icon", { name: "a-lucide-name-the-launcher-does-not-render" })
             ]);
             var badgeText = findChild(surface, "openuiNode:badge").presentation.children[1];
             verify(badgeText.text.indexOf("Done") >= 0);
             verify(badgeText.text.indexOf("]") < 0);
             compare(badgeText.Accessible.name, "Done", "decorative glyphs stay out of the spoken label");
+            var calendarText = findChild(surface, "openuiNode:calendar").presentation.children[1];
+            verify(calendarText.text.indexOf("12 months") >= 0);
+            verify(calendarText.text.indexOf("calendar-days") < 0);
+            verify(calendarText.text.length > "12 months".length, "the known calendar alias has a glyph");
             var iconText = findChild(surface, "openuiNode:reply").presentation.children[1];
             compare(iconText.text, "");
             compare(iconText.Accessible.name, "a-lucide-name-the-launcher-does-not-render");
@@ -232,7 +237,7 @@ Item {
             tryVerify(function() { return findChild(surface, "openuiMark:budget:1") !== null; });
             wait(20);
             var budgetText = findChild(surface, "openuiNode:budget").presentation.children[0].text;
-            verify(budgetText.indexOf("$1200") >= 0, budgetText);
+            verify(budgetText.indexOf("$1,200") >= 0, budgetText);
             compare(findChild(surface, "openuiNode:ratio").presentation.children[0].text,
                     "Ratio  ·  0.3", "binary floating noise must not leak into the label");
             var low = findChild(surface, "openuiMark:budget:0");

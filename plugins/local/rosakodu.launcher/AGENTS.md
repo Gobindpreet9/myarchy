@@ -53,8 +53,10 @@ over a 12% tinted pill. Do not reuse the `neutral` surface token (foreground at
 6%) for badge text — that made newly added dynamic badges look blank even though
 the runtime tree and geometry were correct.
 Slider values use a bounded six-decimal display (`0.3`, never binary noise),
-prefix currency units (`$1200`), and place author mark labels at their actual
-fraction of the track instead of a left-aligned Flow.
+thousands grouping (`$1,200`), prefix currency units, and place author mark
+labels at their actual fraction of the track instead of a left-aligned Flow.
+The local glyph vocabulary also covers the calendar, wallet, route, target and
+money names the model commonly reaches for; unknown names stay omitted.
 Offline verification: **668 Python tests (2 skipped)**, 1,804 main QtTests,
 AiOpenUiServiceCheck's new OpenCode-mode phase and AiServiceCheck green, audit
 passing. Direct integration probes (real OpenCode, scratch homes, real auth DB)
@@ -96,6 +98,18 @@ prompts, not a benchmark. The live gear tool at 820px was inspected before and
 after the choice-control polish; offscreen renders at 420/620/820px were also
 read and inspected (`/tmp/opencode/gear-live-window.png`,
 `/tmp/opencode/gear-offscreen-{420,620,820}-after.png`).
+
+A second natural session on 2026-10-30 did not mention an app or tool:
+"I want to save $3,000 for a trip next year. How much should I set aside each
+month, and how does changing the timeline affect it?" It produced the trip-fund
+OpenUI planner automatically in about 12 s. `timing.retried` was **1**: the
+first authored program was rejected by the native runtime and the automatic
+repair request produced the valid tool, which is the first live end-to-end
+observation of the repair path. The follow-up "What if I already have $500
+saved?" kept OpenUI and the same provider session, and returned a revised tool
+with `$saved = 500` in about 9.1 s (saved state
+`{"3":{"openui:0":{"$months":12,"$saved":500,"$target":3000}}}`). Live panel
+and offscreen 820px renders of the budget tool were read and inspected.
 
 Native OpenUI integration (2026-10-25; live-installed checkpoint `5788367`, now
 extended by the installed OpenCode/validation slice):

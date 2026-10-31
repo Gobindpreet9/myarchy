@@ -7,13 +7,18 @@ function number(value, fallback) {
 }
 function text(value) { return value === null || value === undefined ? "" : String(value); }
 // Keep slider values human-readable: binary floating noise must not become
-// 0.30000000000000004 in a label, and currency units belong before the number.
+// 0.30000000000000004 in a label, thousands get grouping, and currency units
+// belong before the number.
 function numberText(value) {
     if (typeof value !== "number" || !isFinite(value)) return "";
     if (value === 0) return "0";
     var clean = Number(value.toFixed(6));
     if (Math.abs(clean) >= 1e15 || Math.abs(clean) < 1e-6) return clean.toExponential(4);
-    return String(clean);
+    var source = String(clean), parts = source.split("."), signed = parts[0];
+    var sign = signed.charAt(0) === "-" ? "-" : "";
+    var digits = sign ? signed.slice(1) : signed;
+    digits = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return sign + digits + (parts.length > 1 ? "." + parts[1] : "");
 }
 function quantity(value, unit) {
     var number = numberText(value), suffix = text(unit);
@@ -152,12 +157,18 @@ function stroke(kind, p, theme) { return p.stroke !== undefined ? color(p.stroke
 // raw "[lucide-name]" into the interface; Accessible.name keeps the meaning.
 function glyph(name) {
     var glyphs = { plus: "+", minus: "−", check: "✓", x: "×", "chevron-left": "‹", "chevron-right": "›",
-        "chevron-up": "⌃", "chevron-down": "⌄", "arrow-left": "←", "arrow-right": "→", "arrow-up": "↑",
-        "arrow-down": "↓", info: "ⓘ", "circle-help": "?", "help-circle": "?", "rotate-ccw": "↶",
-        "rotate-cw": "↷", refresh: "↻", play: "▷", pause: "Ⅱ", clock: "◷", calendar: "▦", sun: "☼",
-        heart: "♡", star: "☆", sparkles: "✦", settings: "⚙", zap: "⚡", copy: "⧉", check_circle: "✓",
-        "circle-check": "✓", "circle-check-big": "✓", circle: "○", map: "⌖", "map-pin": "⌖",
-        activity: "∿", gauge: "◔", wallet: "▭", "trending-up": "↗", "trending-down": "↘",
+        "chevron-up": "⌃", "chevron-down": "⌄", "chevrons-left": "«", "chevrons-right": "»",
+        "arrow-left": "←", "arrow-right": "→", "arrow-up": "↑", "arrow-down": "↓", "arrow-down-up": "⇅",
+        info: "ⓘ", "circle-help": "?", "help-circle": "?", "rotate-ccw": "↶",
+        "rotate-cw": "↷", refresh: "↻", play: "▷", pause: "Ⅱ", clock: "◷", timer: "◷",
+        calendar: "▦", "calendar-days": "▦", "calendar-clock": "▦", sun: "☼",
+        heart: "♡", star: "☆", sparkles: "✦", settings: "⚙", zap: "⚡", bolt: "⚡", copy: "⧉",
+        check_circle: "✓", "circle-check": "✓", "circle-check-big": "✓", "check-circle-2": "✓", circle: "○",
+        map: "⌖", "map-pin": "⌖", route: "↝", target: "◎", flag: "⚑",
+        activity: "∿", gauge: "◔", wallet: "▤", "wallet-minimal": "▤", "piggy-bank": "◎",
+        banknote: "▤", "credit-card": "▭", receipt: "▤", calculator: "▦",
+        "circle-dollar-sign": "$", dollar: "$", percent: "%",
+        "trending-up": "↗", "trending-down": "↘",
         search: "⌕", trash: "⌫", download: "⇩", upload: "⇧", external_link: "↗",
         "external-link": "↗", lock: "⌑", home: "⌂", menu: "≡" };
     return glyphs[text(name).trim().toLowerCase()] || "";
