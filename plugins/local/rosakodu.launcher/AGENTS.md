@@ -1,7 +1,7 @@
 # rosakodu.launcher agent notes
 
 OpenCode provider (2026-10-30, **live-installed plugin subtree; shell restarted**):
-`ai_broker.py` discovers audited OpenCode **2.2.3** and runs
+`ai_broker.py` discovers OpenCode **2.2.3 or newer within 2.x** and runs
 `opencode run --standalone --format json --agent launcher --model
 opencode-go/deepseek-v4.1-flash#high`, with the prompt on stdin (never process
 argv) and `--session` on follow-ups. `prepare_opencode` builds a private
@@ -11,7 +11,10 @@ shares ONLY the user's real `~/.local/share/opencode/opencode.db` via
 therefore appear in the user's OpenCode session list. Version 2.2.3 was
 live-probed for both the native and OpenUI JSON profiles after the packaged
 desktop updated from 2.1.4; the event schema and config shape were unchanged.
-The answer catalogue
+The packaged desktop self-updates, so discovery accepts the audited baseline
+**2.2.3** and any later 2.x build;
+unknown event kinds still fail closed in ProviderStream, and a new major is
+rejected until audited. The answer catalogue
 travels in each request (Hermes-style compact signature); the config carries
 only the short answer-only policy. The v2.2.3 JSON stream is pinned:
 `step_start`/`text`/`reasoning`/`step_finish` are accepted, `text` parts are
@@ -45,7 +48,7 @@ selected pill gets an accent fill and the focused one a 2px ring; the plain
 RadioGroup `list` stays quiet until chosen. Badge icons use the local glyph
 vocabulary, and unknown icon names are omitted from text while `Accessible.name`
 keeps the authored meaning (never a raw `[lucide-name]`).
-Offline verification: **666 Python tests (2 skipped)**, 1,802 main QtTests,
+Offline verification: **668 Python tests (2 skipped)**, 1,802 main QtTests,
 AiOpenUiServiceCheck's new OpenCode-mode phase and AiServiceCheck green, audit
 passing. Direct integration probes (real OpenCode, scratch homes, real auth DB)
 produced one validated native answer in 18.4 s. Three post-prompt-hardening
@@ -133,7 +136,7 @@ Reproducibility: `python3 -B tests/build_openui.py --check` uses scratch
 provenance and complete MIT notices together. `python3 -B tests/run_offline.py`
 isolates every check, including native runtime/service/store checks. Final
 scratch pass (2026-10-26, OpenCode/validation checkpoint): **21 worker tests**,
-**666 Python tests (2 skipped)**, **1,802 main QtTests**, 29 blocks / 23 visual /
+**668 Python tests (2 skipped)**, **1,802 main QtTests**, 29 blocks / 23 visual /
 12 answer / 6 task-visual, all ten isolated checks, byte-identical generated
 assets and a passing audit.
 The action-handle regression pins distinct authored conditional Copy actions at

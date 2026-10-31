@@ -2484,6 +2484,20 @@ class ContextStubFollowupTests(unittest.TestCase):
                 self.assertIn("Unexpected text after submitted " + key, events[-1]["message"])
 
 
+class OpenCodeVersionPolicyTests(unittest.TestCase):
+    def test_accepts_the_audited_baseline_and_later_2x_only(self):
+        for text in ("opencode v2.2.3", "opencode 2.2.3", "opencode v2.3.0",
+                     "opencode v2.99.1", " opencode v2.2.3\n"):
+            self.assertTrue(b.opencode_version_supported(text), text)
+        for text in ("opencode v2.2.2", "opencode v2.1.9", "opencode v3.0.0",
+                     "opencode v1.99.99", "OpenCode v2.2.3", "", None,
+                     "opencode v2.2.3\nunexpected"):
+            self.assertFalse(b.opencode_version_supported(text), text)
+
+    def test_missing_or_unrecognised_output_is_not_a_supported_build(self):
+        self.assertFalse(b.opencode_version_supported("random output"))
+
+
 class OpenCodePrepareTests(unittest.TestCase):
     def fixture(self, root):
         home = root / "user"
@@ -2546,7 +2560,7 @@ class OpenCodePrepareTests(unittest.TestCase):
             self.assertIsNone(broker.opencode)
             self.assertFalse(isolated.exists())
 
-    def test_discovery_accepts_only_the_audited_build_and_skips_a_hung_candidate(self):
+    def test_discovery_accepts_audited_and_later_2x_and_skips_a_hung_candidate(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             bin_dir = root / "bin"
@@ -2558,11 +2572,17 @@ class OpenCodePrepareTests(unittest.TestCase):
                  patch.object(b, "OPENCODE_FALLBACK_PATHS", ()), \
                  patch.dict(os.environ, {"PATH": str(bin_dir)}):
                 self.assertEqual(asyncio.run(b.discover_opencode()), str(fake))
+            fake.write_text("#!/bin/sh\necho 'opencode v2.2.4'\n")
+            with patch.object(b.Path, "home", return_value=root), \
+                 patch.object(b, "OPENCODE_FALLBACK_PATHS", ()), \
+                 patch.dict(os.environ, {"PATH": str(bin_dir)}):
+                self.assertEqual(asyncio.run(b.discover_opencode()), str(fake),
+                                 "a self-updating 2.x package remains usable")
             fake.write_text("#!/bin/sh\necho 'opencode v9.9.9'\n")
             with patch.object(b.Path, "home", return_value=root), \
                  patch.object(b, "OPENCODE_FALLBACK_PATHS", ()), \
                  patch.dict(os.environ, {"PATH": str(bin_dir)}):
-                with self.assertRaisesRegex(ValueError, "audited version 2.2.3"):
+                with self.assertRaisesRegex(ValueError, "requires version 2.2.3 or newer within 2.x"):
                     asyncio.run(b.discover_opencode())
             # A mise shim is never accepted, even when it answers for the real
             # tool with the user's environment; the private HOME cannot run it.

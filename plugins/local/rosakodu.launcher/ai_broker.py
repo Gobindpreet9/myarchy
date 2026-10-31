@@ -1119,6 +1119,7 @@ def clean_env():
 
 AUDITED_CODEX_VERSION = "0.160.0"
 AUDITED_OPENCODE_VERSION = "2.2.3"
+OPENCODE_COMPATIBLE_MAJOR = 2
 # One audited OpenCode model. The provider variant keeps the answer JSON stable
 # enough for the launcher's strict validator; the catalogue still travels in the
 # request (like Hermes), not in OpenCode's merged user configuration.
@@ -1177,6 +1178,21 @@ async def discover_codex(probe_timeout=None):
     raise ValueError("Codex answer-only mode requires audited version " + AUDITED_CODEX_VERSION + ".")
 
 
+def opencode_version_supported(output):
+    """Accept the audited baseline and later 2.x builds.
+
+    The desktop package updates itself. Unknown event kinds still fail closed
+    in ProviderStream, so a newer minor cannot silently widen the answer-only
+    protocol; a new MAJOR needs a fresh audit because argv/config may change.
+    """
+    match = re.fullmatch(r"\s*opencode v?(\d+)\.(\d+)\.(\d+)\s*", output or "")
+    if match is None:
+        return False
+    version = tuple(int(part) for part in match.groups())
+    audited = tuple(int(part) for part in AUDITED_OPENCODE_VERSION.split("."))
+    return version[0] == OPENCODE_COMPATIBLE_MAJOR and version >= audited
+
+
 async def discover_opencode(probe_timeout=None):
     """Locate and audit the installed OpenCode CLI without running its service.
 
@@ -1221,11 +1237,12 @@ async def discover_opencode(probe_timeout=None):
         except (OSError, asyncio.TimeoutError):
             continue
         text = output.decode(errors="replace").strip()
-        if text in (AUDITED_OPENCODE_VERSION, "opencode v" + AUDITED_OPENCODE_VERSION):
+        if opencode_version_supported(text):
             return candidate
     if not usable:
         raise ValueError("Install OpenCode before using launcher AI.")
-    raise ValueError("OpenCode answer-only mode requires audited version " + AUDITED_OPENCODE_VERSION + ".")
+    raise ValueError("OpenCode answer-only mode requires version " + AUDITED_OPENCODE_VERSION
+                     + " or newer within " + str(OPENCODE_COMPATIBLE_MAJOR) + ".x.")
 
 
 
